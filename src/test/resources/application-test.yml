@@ -1,0 +1,11 @@
+chat:
+  scheduling:
+    enabled: false          # 워커/reaper 는 테스트가 직접 호출해 결정적으로 검증한다
+  fault-injection:
+    enabled: true
+  snapshot:
+    interval: 5
+  projection:
+    max-attempts: 3
+    backoff-base: 1ms
+    backoff-max: 2ms

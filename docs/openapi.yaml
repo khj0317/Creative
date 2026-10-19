@@ -1,0 +1,915 @@
+openapi: 3.1.0
+info:
+  title: Realtime Session Replay API
+  description: |
+    1:1 실시간 채팅 + 이벤트 소싱 기반 특정 시점 상태 복원 API.
+    인증은 과제 범위 밖이므로 X-User-Id 헤더로 사용자를 식별한다.
+    실시간 통신은 WebSocket `/ws/sessions/{id}?userId=&lastSeq=` 를 사용한다(docs/websocket-protocol.md).
+  version: 0.1.0
+servers:
+- url: http://localhost:8080
+  description: Generated server url
+tags:
+- name: Admin
+  description: "DLQ 재처리, 프로젝션 재구축, 장애 주입(로컬 전용)"
+- name: Timeline
+  description: 이벤트 기반 특정 시점 상태 복원 / 이벤트 조회 / 스냅샷
+- name: Sessions
+  description: 세션 생성/참여/종료/조회 및 이벤트 수집
+paths:
+  /sessions:
+    get:
+      tags:
+      - Sessions
+      summary: 세션 목록
+      description: 상태/참여자/생성 기간 필터 + 키셋 커서 페이지네이션(created_at DESC).
+      operationId: list
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - WAITING
+          - ACTIVE
+          - INTERRUPTED
+          - COMPLETED
+      - name: participant
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: from
+        in: query
+        description: "생성 시각 하한(포함), ISO-8601"
+        required: false
+        schema:
+          type: string
+          format: date-time
+      - name: to
+        in: query
+        description: "생성 시각 상한(미포함), ISO-8601"
+        required: false
+        schema:
+          type: string
+          format: date-time
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 20
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/SessionPage"
+    post:
+      tags:
+      - Sessions
+      summary: 세션 생성
+      description: SESSION_CREATED(seq=1) 이벤트와 함께 생성된다.
+      operationId: create
+      parameters:
+      - name: X-User-Id
+        in: header
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSessionRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/SessionView"
+  /sessions/{id}/snapshots:
+    get:
+      tags:
+      - Timeline
+      summary: 스냅샷 목록
+      operationId: listSnapshots
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SnapshotInfo"
+    post:
+      tags:
+      - Timeline
+      summary: 스냅샷 생성/갱신
+      description: head(또는 atSeq) 시점 스냅샷을 만든다. 같은 seq 가 이미 있으면 그대로 둔다(멱등).
+      operationId: createSnapshot
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: atSeq
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/SnapshotInfo"
+  /sessions/{id}/leave:
+    post:
+      tags:
+      - Sessions
+      summary: 세션 퇴장
+      operationId: leave
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: X-User-Id
+        in: header
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/JoinRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/CommandResponse"
+  /sessions/{id}/join:
+    post:
+      tags:
+      - Sessions
+      summary: 세션 참여
+      description: 이미 참여 중이면 이벤트 없이 SKIPPED. 1:1 이므로 최대 2명.
+      operationId: join
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: X-User-Id
+        in: header
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/JoinRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/CommandResponse"
+  /sessions/{id}/events:
+    get:
+      tags:
+      - Timeline
+      summary: 이벤트 조회(디버깅/검증)
+      description: "afterSeq/toSeq(seq 구간) 또는 from/to(server_ts 구간). seq 오름차순, nextAfterSeq\
+        \ 로 이어서 조회."
+      operationId: events
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: afterSeq
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int64
+          default: 0
+      - name: toSeq
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int64
+      - name: from
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date-time
+      - name: to
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date-time
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 100
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EventPage"
+    post:
+      tags:
+      - Sessions
+      summary: 이벤트/메시지 수집(배치)
+      description: |-
+        항목마다 독립적으로 처리되며 결과도 항목별로 돌려준다(CREATED/DUPLICATE/SKIPPED/REJECTED/FAILED).
+        같은 clientEventId 재전송은 저장되지 않고 처음 부여된 seq 를 DUPLICATE 로 돌려준다.
+        순서 기준은 서버가 부여하는 seq 이며, 배열 순서대로 처리된다.
+      operationId: ingest
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: X-User-Id
+        in: header
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IngestRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/IngestResponse"
+  /sessions/{id}/end:
+    post:
+      tags:
+      - Sessions
+      summary: 세션 종료
+      description: "멱등: 이미 종료된 세션이면 SKIPPED."
+      operationId: end
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: X-User-Id
+        in: header
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EndRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/CommandResponse"
+  /admin/sessions/{sessionId}/projection/rebuild:
+    post:
+      tags:
+      - Admin
+      summary: 프로젝션 재구축
+      description: 체크포인트를 0으로 되돌리고 다시 계산한다(정합성 의심 시). 이벤트는 그대로이므로 결과는 결정적.
+      operationId: rebuild
+      parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties: {}
+  /admin/projections/dlq/{dlqId}/redrive:
+    post:
+      tags:
+      - Admin
+      summary: DLQ 항목 재처리
+      description: 원인 해결 후 호출. 해결 표시 + outbox 재적재(체크포인트 멱등이라 안전).
+      operationId: redrive
+      parameters:
+      - name: dlqId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties: {}
+  /admin/presence/reap:
+    post:
+      tags:
+      - Admin
+      summary: 장애 인스턴스 presence 정리 즉시 실행
+      operationId: reap
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties: {}
+  /admin/faults/projection/{sessionId}:
+    post:
+      tags:
+      - Admin
+      summary: "[장애 주입] 세션 프로젝션 강제 실패 on/off"
+      description: chat.fault-injection.enabled=true 일 때만 동작.
+      operationId: projectionFault
+      parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: enabled
+        in: query
+        required: true
+        schema:
+          type: boolean
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: object
+                additionalProperties: {}
+  /sessions/{id}:
+    get:
+      tags:
+      - Sessions
+      summary: 세션 상세
+      description: "참여자/presence 는 동기(강한 일관성), summary 는 비동기 프로젝션(최종적 일관성)."
+      operationId: get
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/SessionView"
+  /sessions/{id}/timeline:
+    get:
+      tags:
+      - Timeline
+      summary: 특정 시점 상태 복원
+      description: |-
+        at(서버 시각) 또는 atSeq 시점의 참여자/presence/메시지(수정·삭제 반영)/unread 를 복원한다.
+        둘 다 없으면 현재(head). mode=AUTO 는 스냅샷+리플레이, FULL 은 전체 리플레이(검증용).
+        at 은 "그 시각까지 서버가 커밋한 마지막 seq" 로 변환된다(server_ts 는 seq 와 함께 단조 증가).
+      operationId: timeline
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: at
+        in: query
+        description: "복원 시각(ISO-8601, 서버 시각 기준)"
+        required: false
+        schema:
+          type: string
+          format: date-time
+      - name: atSeq
+        in: query
+        description: 복원 seq (at 보다 우선)
+        required: false
+        schema:
+          type: integer
+          format: int64
+      - name: messageLimit
+        in: query
+        description: "응답에 담을 최근 메시지 수(기본 50, 최대 500)"
+        required: false
+        schema:
+          type: integer
+          format: int32
+      - name: mode
+        in: query
+        required: false
+        schema:
+          type: string
+          default: AUTO
+          enum:
+          - AUTO
+          - FULL
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/TimelineResponse"
+  /admin/projections/dlq:
+    get:
+      tags:
+      - Admin
+      summary: 프로젝션 DLQ 목록(미해결)
+      operationId: dlq
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DlqEntry"
+components:
+  schemas:
+    CreateSessionRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          example: 상담 세션
+          maxLength: 200
+          minLength: 0
+        invitees:
+          type: array
+          description: 참여 가능한 사용자(최대 2명). 비우면 누구나 참여(선착순 2명).
+          example:
+          - alice
+          - bob
+          items:
+            type: string
+            maxLength: 64
+            minLength: 1
+          maxItems: 2
+          minItems: 0
+    ParticipantView:
+      type: object
+      properties:
+        userId:
+          type: string
+        state:
+          type: string
+          enum:
+          - JOINED
+          - LEFT
+        presence:
+          type: string
+          enum:
+          - ONLINE
+          - OFFLINE
+          - DISCONNECTED
+        online:
+          type: boolean
+        joinedAt:
+          type: string
+          format: date-time
+        leftAt:
+          type: string
+          format: date-time
+        lastSeenAt:
+          type: string
+          format: date-time
+    SessionView:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        status:
+          type: string
+          enum:
+          - WAITING
+          - ACTIVE
+          - INTERRUPTED
+          - COMPLETED
+        createdBy:
+          type: string
+        invitees:
+          type: array
+          items:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
+        endedAt:
+          type: string
+          format: date-time
+        headSeq:
+          type: integer
+          format: int64
+        lastEventAt:
+          type: string
+          format: date-time
+        participants:
+          type: array
+          items:
+            $ref: "#/components/schemas/ParticipantView"
+        summary:
+          $ref: "#/components/schemas/Summary"
+    Summary:
+      type: object
+      description: 비동기 프로젝션으로 계산한 요약. projectedSeq < headSeq 이면 아직 반영 중(최종적 일관성).
+      properties:
+        projectedSeq:
+          type: integer
+          format: int64
+        lag:
+          type: integer
+          format: int64
+        messageCount:
+          type: integer
+          format: int32
+        lastMessageSeq:
+          type: integer
+          format: int64
+        lastMessageAt:
+          type: string
+          format: date-time
+        lastMessagePreview:
+          type: string
+        lastSnapshotSeq:
+          type: integer
+          format: int64
+    SnapshotInfo:
+      type: object
+      properties:
+        seq:
+          type: integer
+          format: int64
+        stateVersion:
+          type: integer
+          format: int32
+        eventCount:
+          type: integer
+          format: int32
+        sizeBytes:
+          type: integer
+          format: int32
+        createdAt:
+          type: string
+          format: date-time
+    JoinRequest:
+      type: object
+      properties:
+        clientEventId:
+          type: string
+          description: 멱등 키(선택). 생략하면 서버가 생성한다. 이미 참여 중이면 이벤트 없이 현재 상태를 돌려준다.
+          maxLength: 80
+          minLength: 0
+    CommandResponse:
+      type: object
+      properties:
+        outcome:
+          type: string
+        seq:
+          type: integer
+          format: int64
+        session:
+          $ref: "#/components/schemas/SessionView"
+    EventRequest:
+      type: object
+      description: 클라이언트가 보내는 이벤트 1건
+      properties:
+        clientEventId:
+          type: string
+          description: 멱등 키(클라이언트 생성 UUID 권장). 재전송 시 같은 값을 보내야 한다.
+          example: c1f3a2e0-7b1d-4c55-9f0e-2a9d3c1b7e01
+          maxLength: 80
+          minLength: 0
+        type:
+          type: string
+          description: MESSAGE | MESSAGE_EDITED | MESSAGE_DELETED | READ | JOIN |
+            LEAVE
+          enum:
+          - SESSION_CREATED
+          - JOIN
+          - LEAVE
+          - DISCONNECT
+          - RECONNECT
+          - MESSAGE
+          - MESSAGE_EDITED
+          - MESSAGE_DELETED
+          - READ
+          - SESSION_ENDED
+        payload:
+          type: object
+          additionalProperties: {}
+          description: "MESSAGE: {content} / MESSAGE_EDITED: {targetSeq, content}\
+            \ / MESSAGE_DELETED: {targetSeq} / READ: {upToSeq}"
+          example:
+            content: 안녕하세요
+        clientTs:
+          type: string
+          format: date-time
+          description: "클라이언트 시각(참고용, 정렬에 쓰지 않음)"
+      required:
+      - clientEventId
+      - type
+    IngestRequest:
+      type: object
+      properties:
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/EventRequest"
+          maxItems: 100
+          minItems: 0
+      required:
+      - events
+    IngestResponse:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/ItemResult"
+    ItemResult:
+      type: object
+      properties:
+        clientEventId:
+          type: string
+        status:
+          type: string
+          enum:
+          - CREATED
+          - DUPLICATE
+          - SKIPPED
+          - REJECTED
+          - FAILED
+        seq:
+          type: integer
+          format: int64
+        serverTs:
+          type: string
+        code:
+          type: string
+        message:
+          type: string
+        retryable:
+          type: boolean
+    EndRequest:
+      type: object
+      properties:
+        clientEventId:
+          type: string
+          maxLength: 80
+          minLength: 0
+        reason:
+          type: string
+          maxLength: 200
+          minLength: 0
+    SessionPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SessionView"
+        nextCursor:
+          type: string
+    MessageView:
+      type: object
+      properties:
+        seq:
+          type: integer
+          format: int64
+        senderId:
+          type: string
+        content:
+          type: string
+        status:
+          type: string
+          enum:
+          - SENT
+          - EDITED
+          - DELETED
+        sentAt:
+          type: string
+          format: date-time
+        editedAt:
+          type: string
+          format: date-time
+        deletedAt:
+          type: string
+          format: date-time
+        editCount:
+          type: integer
+          format: int32
+    RestoreInfo:
+      type: object
+      properties:
+        strategy:
+          type: string
+          enum:
+          - SNAPSHOT_REPLAY
+          - FULL_REPLAY
+        snapshotSeq:
+          type: integer
+          format: int64
+        replayedEvents:
+          type: integer
+          format: int32
+        elapsedMicros:
+          type: integer
+          format: int64
+    TimelineResponse:
+      type: object
+      properties:
+        sessionId:
+          type: string
+          format: uuid
+        requestedAt:
+          type: string
+          format: date-time
+        seq:
+          type: integer
+          format: int64
+        stateAt:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum:
+          - WAITING
+          - ACTIVE
+          - INTERRUPTED
+          - COMPLETED
+        title:
+          type: string
+        createdBy:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        endedAt:
+          type: string
+          format: date-time
+        participants:
+          type: array
+          items:
+            $ref: "#/components/schemas/ParticipantView"
+        totalMessages:
+          type: integer
+          format: int32
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/MessageView"
+        restore:
+          $ref: "#/components/schemas/RestoreInfo"
+    EventPage:
+      type: object
+      properties:
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/SessionEvent"
+        nextAfterSeq:
+          type: integer
+          format: int64
+        headSeq:
+          type: integer
+          format: int64
+    SessionEvent:
+      type: object
+      properties:
+        sessionId:
+          type: string
+          format: uuid
+        seq:
+          type: integer
+          format: int64
+        eventId:
+          type: string
+          format: uuid
+        clientEventId:
+          type: string
+        type:
+          type: string
+          enum:
+          - SESSION_CREATED
+          - JOIN
+          - LEAVE
+          - DISCONNECT
+          - RECONNECT
+          - MESSAGE
+          - MESSAGE_EDITED
+          - MESSAGE_DELETED
+          - READ
+          - SESSION_ENDED
+        actorId:
+          type: string
+        payload:
+          type: object
+          additionalProperties: {}
+        clientTs:
+          type: string
+          format: date-time
+        serverTs:
+          type: string
+          format: date-time
+    DlqEntry:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        sessionId:
+          type: string
+          format: uuid
+        targetSeq:
+          type: integer
+          format: int64
+        attempts:
+          type: integer
+          format: int32
+        lastError:
+          type: string
+        failedAt:
+          type: string
+          format: date-time
+        resolvedAt:
+          type: string
+          format: date-time

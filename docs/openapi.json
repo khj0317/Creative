@@ -1,0 +1,1341 @@
+{
+    "openapi": "3.1.0",
+    "info": {
+        "title": "Realtime Session Replay API",
+        "description": "1:1 \udcec\ub58e\udcec\ub586\u5a9b\udc84 \uf9e2\uafaa\ub63f + \udcec\uc520\u8e30\u317d\ub4c3 \udcec\ub0fc\udcec\ub59b \u6e72\uacd5\ucef2 \udced\ub4c5\udcec\uc819 \udcec\ub586\udcec\uc80f \udcec\uae3d\udced\uae6d \u8e42\ub4ed\uc35d API.\n\udcec\uc524\uf9dd\uc579\udc9d\udc80 \u6028\uc1f1\uc823 \u8e30\ubdbf\uc41e \u8adb\ubf70\uc520\u8a98\udc80\u6fe1\udc9c X-User-Id \udced\ubfe4\udceb\ub711\u6fe1\udc9c \udcec\uad97\udcec\uc29c\udcec\uc604\u745c\udcbc \udcec\ub587\u8e42\uafaa\ube33\udceb\ub58e.\n\udcec\ub58e\udcec\ub586\u5a9b\udc84 \udced\ub13b\udcec\ub58a\udcec\udc9d\udc80 WebSocket `/ws/sessions/{id}?userId=&lastSeq=` \u745c\udcbc \udcec\uad97\udcec\uc29c\udced\ube33\udceb\ub58e(docs/websocket-protocol.md).\n",
+        "version": "0.1.0"
+    },
+    "servers": [
+        {
+            "url": "http://localhost:8080",
+            "description": "Generated server url"
+        }
+    ],
+    "tags": [
+        {
+            "name": "Admin",
+            "description": "DLQ \udcec\uc631\uf9e3\uc10e\u2501, \udced\ubd3d\u6fe1\uc496\uc825\udcec\ub021 \udcec\uc631\u63f4\u044a\ud15e, \udcec\uc623\udcec\ube37 \u4e8c\uc1f1\uc5ef(\u6fe1\uc496\ube84 \udcec\uc7fe\udcec\uc29c)"
+        },
+        {
+            "name": "Timeline",
+            "description": "\udcec\uc520\u8e30\u317d\ub4c3 \u6e72\uacd5\ucef2 \udced\ub4c5\udcec\uc819 \udcec\ub586\udcec\uc80f \udcec\uae3d\udced\uae6d \u8e42\ub4ed\uc35d / \udcec\uc520\u8e30\u317d\ub4c3 \u8b70\uace0\uc276 / \udcec\ub4aa\udceb\uae44\udcec\uae91"
+        },
+        {
+            "name": "Sessions",
+            "description": "\udcec\uaf6d\udcec\ub021 \udcec\uae6e\udcec\uaf66/\uf9e1\uba84\ubfec/\u91ab\ub085\uc9ba/\u8b70\uace0\uc276 \u8adb\udc8f \udcec\uc520\u8e30\u317d\ub4c3 \udcec\ub2d4\uf9de\udc91"
+        }
+    ],
+    "paths": {
+        "/sessions": {
+            "get": {
+                "tags": [
+                    "Sessions"
+                ],
+                "summary": "\udcec\uaf6d\udcec\ub021 \uf9cf\u2478\uc909",
+                "description": "\udcec\uae3d\udced\uae6d/\uf9e1\uba84\ubfec\udcec\uc604/\udcec\uae6e\udcec\uaf66 \u6e72\uaccc\uced9 \udced\ube18\udced\uaf63 + \udced\uad8e\udcec\ub011 \u800c\u317c\uaf4c \udced\ub7f9\udcec\uc520\uf9de\udc80\udceb\uaf55\udcec\uc520\udcec\ub021(created_at DESC).",
+                "operationId": "list",
+                "parameters": [
+                    {
+                        "name": "status",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "WAITING",
+                                "ACTIVE",
+                                "INTERRUPTED",
+                                "COMPLETED"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "participant",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "from",
+                        "in": "query",
+                        "description": "\udcec\uae6e\udcec\uaf66 \udcec\ub586\u5a9b\udc81 \udced\ube2f\udced\ube33(\udced\ub8f7\udced\ube3f), ISO-8601",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "format": "date-time"
+                        }
+                    },
+                    {
+                        "name": "to",
+                        "in": "query",
+                        "description": "\udcec\uae6e\udcec\uaf66 \udcec\ub586\u5a9b\udc81 \udcec\uae3d\udced\ube33(\u8a98\uba85\ub8f7\udced\ube3f), ISO-8601",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "format": "date-time"
+                        }
+                    },
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int32",
+                            "default": 20
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SessionPage"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "tags": [
+                    "Sessions"
+                ],
+                "summary": "\udcec\uaf6d\udcec\ub021 \udcec\uae6e\udcec\uaf66",
+                "description": "SESSION_CREATED(seq=1) \udcec\uc520\u8e30\u317d\ub4c3\udcec\udc99\udc80 \udced\ube3f\u733f\udc98 \udcec\uae6e\udcec\uaf66\udceb\ub9c2\udceb\ub58e.",
+                "operationId": "create",
+                "parameters": [
+                    {
+                        "name": "X-User-Id",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreateSessionRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SessionView"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/sessions/{id}/snapshots": {
+            "get": {
+                "tags": [
+                    "Timeline"
+                ],
+                "summary": "\udcec\ub4aa\udceb\uae44\udcec\uae91 \uf9cf\u2478\uc909",
+                "operationId": "listSnapshots",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/SnapshotInfo"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "tags": [
+                    "Timeline"
+                ],
+                "summary": "\udcec\ub4aa\udceb\uae44\udcec\uae91 \udcec\uae6e\udcec\uaf66/\u5a9b\uae46\ub58a",
+                "description": "head(\udceb\uc089\udceb\ub497 atSeq) \udcec\ub586\udcec\uc80f \udcec\ub4aa\udceb\uae44\udcec\uae91\udcec\uc4e3 \uf9cd\ub6ae\ubc7a\udceb\ub58e. \u5a9b\uc208\udc9d\udc80 seq \u5a9b\udc80 \udcec\uc520\u8a98\udcb8 \udcec\uc5f3\udcec\uc45d\uf9ce\udcb4 \u6d39\uba83\udc8c\udc80\u6fe1\udc9c \udceb\ubaa6\udceb\ub58e(\uf9ce\uae45\ubc91).",
+                "operationId": "createSnapshot",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    },
+                    {
+                        "name": "atSeq",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int64"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SnapshotInfo"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/sessions/{id}/leave": {
+            "post": {
+                "tags": [
+                    "Sessions"
+                ],
+                "summary": "\udcec\uaf6d\udcec\ub021 \udced\ub21c\udcec\uc623",
+                "operationId": "leave",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    },
+                    {
+                        "name": "X-User-Id",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/JoinRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CommandResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/sessions/{id}/join": {
+            "post": {
+                "tags": [
+                    "Sessions"
+                ],
+                "summary": "\udcec\uaf6d\udcec\ub021 \uf9e1\uba84\ubfec",
+                "description": "\udcec\uc520\u8a98\udcb8 \uf9e1\uba84\ubfec \u4ee5\ubb12\uc520\uf9ce\udcb4 \udcec\uc520\u8e30\u317d\ub4c3 \udcec\ubfbe\udcec\uc520 SKIPPED. 1:1 \udcec\uc520\u8a98\udc80\u6fe1\udc9c \uf9e4\uc495\udc8c\udc80 2\uf9cf\udc85.",
+                "operationId": "join",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    },
+                    {
+                        "name": "X-User-Id",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/JoinRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CommandResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/sessions/{id}/events": {
+            "get": {
+                "tags": [
+                    "Timeline"
+                ],
+                "summary": "\udcec\uc520\u8e30\u317d\ub4c3 \u8b70\uace0\uc276(\udceb\ubd52\u8e30\uafa7\ud26d/\u5bc3\udc80\uf9dd\udc9d)",
+                "description": "afterSeq/toSeq(seq \u63f4\u0448\uced9) \udceb\uc089\udceb\ub497 from/to(server_ts \u63f4\u0448\uced9). seq \udcec\uc0a4\u7531\uafa9\uac10\udcec\ub2da, nextAfterSeq \u6fe1\udc9c \udcec\uc520\udcec\ubf31\udcec\uaf4c \u8b70\uace0\uc276.",
+                "operationId": "events",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    },
+                    {
+                        "name": "afterSeq",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int64",
+                            "default": 0
+                        }
+                    },
+                    {
+                        "name": "toSeq",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int64"
+                        }
+                    },
+                    {
+                        "name": "from",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "format": "date-time"
+                        }
+                    },
+                    {
+                        "name": "to",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "format": "date-time"
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int32",
+                            "default": 100
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/EventPage"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "tags": [
+                    "Sessions"
+                ],
+                "summary": "\udcec\uc520\u8e30\u317d\ub4c3/\uf9ce\ubdbf\ub586\uf9de\udc80 \udcec\ub2d4\uf9de\udc91(\u8adb\uacd7\ud282)",
+                "description": "\udced\ube46\uf9cf\u2478\ucb4f\udceb\ub58e \udceb\ub8c6\u7531\uc38c\uc7fb\udcec\uc45d\u6fe1\udc9c \uf9e3\uc10e\u2501\udceb\ub9ba\uf9ce\udcb0 \u5bc3\uaccc\ub0b5\udceb\ub8c4 \udced\ube46\uf9cf\u2478\ud00e\u6fe1\udc9c \udceb\ub8ce\udceb\uc82e\u4ee5\udc80\udceb\ub58e(CREATED/DUPLICATE/SKIPPED/REJECTED/FAILED).\n\u5a9b\uc208\udc9d\udc80 clientEventId \udcec\uc631\udcec\uc7fe\udcec\ub11a\udcec\udc9d\udc80 \udcec\udca0\udc80\udcec\uc623\udceb\ub9ba\uf9de\udc80 \udcec\ube21\u6028\udca0 \uf9e3\uc10f\uc4ec \u907a\udc80\udcec\ubfec\udceb\ub9c2 seq \u745c\udcbc DUPLICATE \u6fe1\udc9c \udceb\ub8ce\udceb\uc82e\u4ee5\udc80\udceb\ub58e.\n\udcec\ub2da\udcec\uaf4c \u6e72\uacd7\udca4\udc80\udcec\udc9d\udc80 \udcec\uaf4c\u8e30\uafa7\udcb0\udc80 \u907a\udc80\udcec\ubfec\udced\ube2f\udceb\ub497 seq \udcec\uc520\uf9ce\udcb0, \u8adb\uacd7\ubff4 \udcec\ub2da\udcec\uaf4c\udceb\udc8c\udc80\u6fe1\udc9c \uf9e3\uc10e\u2501\udceb\ub9c2\udceb\ub58e.",
+                "operationId": "ingest",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    },
+                    {
+                        "name": "X-User-Id",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/IngestRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/IngestResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/sessions/{id}/end": {
+            "post": {
+                "tags": [
+                    "Sessions"
+                ],
+                "summary": "\udcec\uaf6d\udcec\ub021 \u91ab\ub085\uc9ba",
+                "description": "\uf9ce\uae45\ubc91: \udcec\uc520\u8a98\udcb8 \u91ab\ub085\uc9ba\udceb\ub9c2 \udcec\uaf6d\udcec\ub021\udcec\uc520\uf9ce\udcb4 SKIPPED.",
+                "operationId": "end",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    },
+                    {
+                        "name": "X-User-Id",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/EndRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CommandResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/sessions/{sessionId}/projection/rebuild": {
+            "post": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "\udced\ubd3d\u6fe1\uc496\uc825\udcec\ub021 \udcec\uc631\u63f4\u044a\ud15e",
+                "description": "\uf9e3\ub304\uac95\udced\ub8f7\udcec\uc524\udced\ub4c3\u745c\udcbc 0\udcec\uc45d\u6fe1\udc9c \udceb\ub9ba\udceb\ub8ce\u7531\u0448\ud02c \udceb\ub58e\udcec\ub586 \u6028\uafa9\uad9b\udced\ube33\udceb\ub58e(\udcec\uc819\udced\ube40\udcec\uaf66 \udcec\uc4fd\udcec\ub596 \udcec\ub586). \udcec\uc520\u8e30\u317d\ub4c3\udceb\ub497 \u6d39\uba83\udc8c\udc80\u6fe1\uc496\uc520\u8a98\udc80\u6fe1\udc9c \u5bc3\uaccc\ub0b5\udceb\ub497 \u5bc3\uacd7\uc819\udcec\uc7fb.",
+                "operationId": "rebuild",
+                "parameters": [
+                    {
+                        "name": "sessionId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "type": "object",
+                                    "additionalProperties": {}
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/projections/dlq/{dlqId}/redrive": {
+            "post": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "DLQ \udced\ube46\uf9cf\udca9 \udcec\uc631\uf9e3\uc10e\u2501",
+                "description": "\udcec\uc35d\udcec\uc524 \udced\ube50\u5bc3\udcb0 \udced\uc351 \udced\uc0c7\u7570\udc9c. \udced\ube50\u5bc3\udcb0 \udced\ubab4\udcec\ub586 + outbox \udcec\uc631\udcec\uc7fb\udcec\uc631(\uf9e3\ub304\uac95\udced\ub8f7\udcec\uc524\udced\ub4c3 \uf9ce\uae45\ubc91\udcec\uc520\udceb\uc52a \udcec\ube1e\udcec\uc7fe).",
+                "operationId": "redrive",
+                "parameters": [
+                    {
+                        "name": "dlqId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int64"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "type": "object",
+                                    "additionalProperties": {}
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/presence/reap": {
+            "post": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "\udcec\uc623\udcec\ube37 \udcec\uc524\udcec\ub4aa\udced\uaf69\udcec\ub4aa presence \udcec\uc819\u7531\udcac \uf9dd\ub431\ub586 \udcec\ub58e\udced\ubefe",
+                "operationId": "reap",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "type": "object",
+                                    "additionalProperties": {}
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/faults/projection/{sessionId}": {
+            "post": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "[\udcec\uc623\udcec\ube37 \u4e8c\uc1f1\uc5ef] \udcec\uaf6d\udcec\ub021 \udced\ubd3d\u6fe1\uc496\uc825\udcec\ub021 \u5a9b\ubea4\uc823 \udcec\ub58e\udced\ub663 on/off",
+                "description": "chat.fault-injection.enabled=true \udcec\uc52a \udceb\ube23\uf9cd\udc8c \udceb\ub8de\udcec\uc609.",
+                "operationId": "projectionFault",
+                "parameters": [
+                    {
+                        "name": "sessionId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    },
+                    {
+                        "name": "enabled",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "boolean"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "type": "object",
+                                    "additionalProperties": {}
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/sessions/{id}": {
+            "get": {
+                "tags": [
+                    "Sessions"
+                ],
+                "summary": "\udcec\uaf6d\udcec\ub021 \udcec\uae3d\udcec\uaf6d",
+                "description": "\uf9e1\uba84\ubfec\udcec\uc604/presence \udceb\ub497 \udceb\ub8de\u6e72\udcb0(\u5a9b\ubea5\ube33 \udcec\uc52a\u613f\udc80\udcec\uaf66), summary \udceb\ub497 \u936e\uafa8\ub8de\u6e72\udcb0 \udced\ubd3d\u6fe1\uc496\uc825\udcec\ub021(\uf9e4\uc496\uc94c\udcec\uc7fb \udcec\uc52a\u613f\udc80\udcec\uaf66).",
+                "operationId": "get",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SessionView"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/sessions/{id}/timeline": {
+            "get": {
+                "tags": [
+                    "Timeline"
+                ],
+                "summary": "\udced\ub4c5\udcec\uc819 \udcec\ub586\udcec\uc80f \udcec\uae3d\udced\uae6d \u8e42\ub4ed\uc35d",
+                "description": "at(\udcec\uaf4c\u8e30\udc84 \udcec\ub586\u5a9b\udc81) \udceb\uc089\udceb\ub497 atSeq \udcec\ub586\udcec\uc80f\udcec\uc4fd \uf9e1\uba84\ubfec\udcec\uc604/presence/\uf9ce\ubdbf\ub586\uf9de\udc80(\udcec\ub2d4\udcec\uc819\uca0c\udcec\uad98\udcec\uc823 \u8adb\uc10f\uc07a)/unread \u745c\udcbc \u8e42\ub4ed\uc35d\udced\ube33\udceb\ub58e.\n\udceb\ubaae \udceb\ub58e \udcec\ubfbe\udcec\uc45d\uf9ce\udcb4 \udced\uc07d\udcec\uc631(head). mode=AUTO \udceb\ub497 \udcec\ub4aa\udceb\uae44\udcec\uae91+\u7531\u044b\ubd46\udceb\uc805\udcec\uc520, FULL \udcec\udc9d\udc80 \udcec\uc7fe\uf9e3\udcb4 \u7531\u044b\ubd46\udceb\uc805\udcec\uc520(\u5bc3\udc80\uf9dd\uc579\uc29c).\nat \udcec\udc9d\udc80 \"\u6d39\udcb8 \udcec\ub586\u5a9b\uacf4\ud274\uf9de\udc80 \udcec\uaf4c\u8e30\uafa7\udcb0\udc80 \u800c\u317b\ucee0\udced\ube33 \uf9cd\ub349\udca7\udc80\uf9cd\udc89 seq\" \u6fe1\udc9c \u8e42\udc80\udced\uc19a\udceb\ub9c2\udceb\ub58e(server_ts \udceb\ub497 seq \udcec\udc99\udc80 \udced\ube3f\u733f\udc98 \udceb\ub592\u8b70\udcb0 \uf9dd\uc577\udcb0\udc80).",
+                "operationId": "timeline",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    },
+                    {
+                        "name": "at",
+                        "in": "query",
+                        "description": "\u8e42\ub4ed\uc35d \udcec\ub586\u5a9b\udc81(ISO-8601, \udcec\uaf4c\u8e30\udc84 \udcec\ub586\u5a9b\udc81 \u6e72\uacd7\udca4\udc80)",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "format": "date-time"
+                        }
+                    },
+                    {
+                        "name": "atSeq",
+                        "in": "query",
+                        "description": "\u8e42\ub4ed\uc35d seq (at \u8e42\ub300\ub58e \udcec\uc2a6\udcec\uaf51)",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int64"
+                        }
+                    },
+                    {
+                        "name": "messageLimit",
+                        "in": "query",
+                        "description": "\udcec\uc4f3\udceb\ub59f\udcec\ubfc9 \udceb\ub59e\udcec\uc4e3 \uf9e4\uc493\ub810 \uf9ce\ubdbf\ub586\uf9de\udc80 \udcec\ub2d4(\u6e72\uacd5\ub0af 50, \uf9e4\uc495\udc8c\udc80 500)",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "format": "int32"
+                        }
+                    },
+                    {
+                        "name": "mode",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "default": "AUTO",
+                            "enum": [
+                                "AUTO",
+                                "FULL"
+                            ]
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/TimelineResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/projections/dlq": {
+            "get": {
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "\udced\ubd3d\u6fe1\uc496\uc825\udcec\ub021 DLQ \uf9cf\u2478\uc909(\u8a98\uba85\ube50\u5bc3\udcb0)",
+                "operationId": "dlq",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/DlqEntry"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "components": {
+        "schemas": {
+            "CreateSessionRequest": {
+                "type": "object",
+                "properties": {
+                    "title": {
+                        "type": "string",
+                        "example": "\udcec\uae3d\udceb\ub59e \udcec\uaf6d\udcec\ub021",
+                        "maxLength": 200,
+                        "minLength": 0
+                    },
+                    "invitees": {
+                        "type": "array",
+                        "description": "\uf9e1\uba84\ubfec \u5a9b\udc80\udceb\ub4ab\udced\ube33 \udcec\uad97\udcec\uc29c\udcec\uc604(\uf9e4\uc495\udc8c\udc80 2\uf9cf\udc85). \u936e\uafa9\uc2a6\uf9ce\udcb4 \udceb\ub2bb\u63f4\u0449\uad79 \uf9e1\uba84\ubfec(\udcec\uaf51\uf9e1\u2479\ub2da 2\uf9cf\udc85).",
+                        "example": [
+                            "alice",
+                            "bob"
+                        ],
+                        "items": {
+                            "type": "string",
+                            "maxLength": 64,
+                            "minLength": 1
+                        },
+                        "maxItems": 2,
+                        "minItems": 0
+                    }
+                }
+            },
+            "ParticipantView": {
+                "type": "object",
+                "properties": {
+                    "userId": {
+                        "type": "string"
+                    },
+                    "state": {
+                        "type": "string",
+                        "enum": [
+                            "JOINED",
+                            "LEFT"
+                        ]
+                    },
+                    "presence": {
+                        "type": "string",
+                        "enum": [
+                            "ONLINE",
+                            "OFFLINE",
+                            "DISCONNECTED"
+                        ]
+                    },
+                    "online": {
+                        "type": "boolean"
+                    },
+                    "joinedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "leftAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "lastSeenAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    }
+                }
+            },
+            "SessionView": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "format": "uuid"
+                    },
+                    "title": {
+                        "type": "string"
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "WAITING",
+                            "ACTIVE",
+                            "INTERRUPTED",
+                            "COMPLETED"
+                        ]
+                    },
+                    "createdBy": {
+                        "type": "string"
+                    },
+                    "invitees": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "createdAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "endedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "headSeq": {
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    "lastEventAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "participants": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ParticipantView"
+                        }
+                    },
+                    "summary": {
+                        "$ref": "#/components/schemas/Summary"
+                    }
+                }
+            },
+            "Summary": {
+                "type": "object",
+                "description": "\u936e\uafa8\ub8de\u6e72\udcb0 \udced\ubd3d\u6fe1\uc496\uc825\udcec\ub021\udcec\uc45d\u6fe1\udc9c \u6028\uafa9\uad9b\udced\ube33 \udcec\uc282\udcec\ube5f. projectedSeq < headSeq \udcec\uc520\uf9ce\udcb4 \udcec\ube18\uf9de\udc81 \u8adb\uc10f\uc07a \u4ee5\udc91(\uf9e4\uc496\uc94c\udcec\uc7fb \udcec\uc52a\u613f\udc80\udcec\uaf66).",
+                "properties": {
+                    "projectedSeq": {
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    "lag": {
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    "messageCount": {
+                        "type": "integer",
+                        "format": "int32"
+                    },
+                    "lastMessageSeq": {
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    "lastMessageAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "lastMessagePreview": {
+                        "type": "string"
+                    },
+                    "lastSnapshotSeq": {
+                        "type": "integer",
+                        "format": "int64"
+                    }
+                }
+            },
+            "SnapshotInfo": {
+                "type": "object",
+                "properties": {
+                    "seq": {
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    "stateVersion": {
+                        "type": "integer",
+                        "format": "int32"
+                    },
+                    "eventCount": {
+                        "type": "integer",
+                        "format": "int32"
+                    },
+                    "sizeBytes": {
+                        "type": "integer",
+                        "format": "int32"
+                    },
+                    "createdAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    }
+                }
+            },
+            "JoinRequest": {
+                "type": "object",
+                "properties": {
+                    "clientEventId": {
+                        "type": "string",
+                        "description": "\uf9ce\uae45\ubc91 \udced\uad8e(\udcec\uaf51\udced\uae6e). \udcec\uae6e\udceb\uc642\udced\ube2f\uf9ce\udcb4 \udcec\uaf4c\u8e30\uafa7\udcb0\udc80 \udcec\uae6e\udcec\uaf66\udced\ube33\udceb\ub58e. \udcec\uc520\u8a98\udcb8 \uf9e1\uba84\ubfec \u4ee5\ubb12\uc520\uf9ce\udcb4 \udcec\uc520\u8e30\u317d\ub4c3 \udcec\ubfbe\udcec\uc520 \udced\uc07d\udcec\uc631 \udcec\uae3d\udced\uae6d\u745c\udcbc \udceb\ub8ce\udceb\uc82e\u4ee5\udc80\udceb\ub58e.",
+                        "maxLength": 80,
+                        "minLength": 0
+                    }
+                }
+            },
+            "CommandResponse": {
+                "type": "object",
+                "properties": {
+                    "outcome": {
+                        "type": "string"
+                    },
+                    "seq": {
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    "session": {
+                        "$ref": "#/components/schemas/SessionView"
+                    }
+                }
+            },
+            "EventRequest": {
+                "type": "object",
+                "description": "\udced\uaca2\udceb\uc52a\udcec\uc520\udcec\ubf35\udced\ub4c3\u5a9b\udc80 \u8e42\ub300\uada1\udceb\ub497 \udcec\uc520\u8e30\u317d\ub4c3 1\u5ac4\udcb4",
+                "properties": {
+                    "clientEventId": {
+                        "type": "string",
+                        "description": "\uf9ce\uae45\ubc91 \udced\uad8e(\udced\uaca2\udceb\uc52a\udcec\uc520\udcec\ubf35\udced\ub4c3 \udcec\uae6e\udcec\uaf66 UUID \u6c85\ub6af\uc623). \udcec\uc631\udcec\uc7fe\udcec\ub11a \udcec\ub586 \u5a9b\uc208\udc9d\udc80 \u5a9b\ubbea\uc4e3 \u8e42\ub300\uada1\udcec\ube5e \udced\ube33\udceb\ub58e.",
+                        "example": "c1f3a2e0-7b1d-4c55-9f0e-2a9d3c1b7e01",
+                        "maxLength": 80,
+                        "minLength": 0
+                    },
+                    "type": {
+                        "type": "string",
+                        "description": "MESSAGE | MESSAGE_EDITED | MESSAGE_DELETED | READ | JOIN | LEAVE",
+                        "enum": [
+                            "SESSION_CREATED",
+                            "JOIN",
+                            "LEAVE",
+                            "DISCONNECT",
+                            "RECONNECT",
+                            "MESSAGE",
+                            "MESSAGE_EDITED",
+                            "MESSAGE_DELETED",
+                            "READ",
+                            "SESSION_ENDED"
+                        ]
+                    },
+                    "payload": {
+                        "type": "object",
+                        "additionalProperties": {},
+                        "description": "MESSAGE: {content} / MESSAGE_EDITED: {targetSeq, content} / MESSAGE_DELETED: {targetSeq} / READ: {upToSeq}",
+                        "example": {
+                            "content": "\udcec\ube1e\udceb\ub01e\udced\ube2f\udcec\uaf6d\udcec\uc282"
+                        }
+                    },
+                    "clientTs": {
+                        "type": "string",
+                        "format": "date-time",
+                        "description": "\udced\uaca2\udceb\uc52a\udcec\uc520\udcec\ubf35\udced\ub4c3 \udcec\ub586\u5a9b\udc81(\uf9e1\uba78\ud02c\udcec\uc29c, \udcec\uc819\udceb\uc839\udcec\ubfc9 \udcec\ubc90\uf9de\udc80 \udcec\ube21\udcec\uc4ec)"
+                    }
+                },
+                "required": [
+                    "clientEventId",
+                    "type"
+                ]
+            },
+            "IngestRequest": {
+                "type": "object",
+                "properties": {
+                    "events": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/EventRequest"
+                        },
+                        "maxItems": 100,
+                        "minItems": 0
+                    }
+                },
+                "required": [
+                    "events"
+                ]
+            },
+            "IngestResponse": {
+                "type": "object",
+                "properties": {
+                    "results": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ItemResult"
+                        }
+                    }
+                }
+            },
+            "ItemResult": {
+                "type": "object",
+                "properties": {
+                    "clientEventId": {
+                        "type": "string"
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "CREATED",
+                            "DUPLICATE",
+                            "SKIPPED",
+                            "REJECTED",
+                            "FAILED"
+                        ]
+                    },
+                    "seq": {
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    "serverTs": {
+                        "type": "string"
+                    },
+                    "code": {
+                        "type": "string"
+                    },
+                    "message": {
+                        "type": "string"
+                    },
+                    "retryable": {
+                        "type": "boolean"
+                    }
+                }
+            },
+            "EndRequest": {
+                "type": "object",
+                "properties": {
+                    "clientEventId": {
+                        "type": "string",
+                        "maxLength": 80,
+                        "minLength": 0
+                    },
+                    "reason": {
+                        "type": "string",
+                        "maxLength": 200,
+                        "minLength": 0
+                    }
+                }
+            },
+            "SessionPage": {
+                "type": "object",
+                "properties": {
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/SessionView"
+                        }
+                    },
+                    "nextCursor": {
+                        "type": "string"
+                    }
+                }
+            },
+            "MessageView": {
+                "type": "object",
+                "properties": {
+                    "seq": {
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    "senderId": {
+                        "type": "string"
+                    },
+                    "content": {
+                        "type": "string"
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "SENT",
+                            "EDITED",
+                            "DELETED"
+                        ]
+                    },
+                    "sentAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "editedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "deletedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "editCount": {
+                        "type": "integer",
+                        "format": "int32"
+                    }
+                }
+            },
+            "RestoreInfo": {
+                "type": "object",
+                "properties": {
+                    "strategy": {
+                        "type": "string",
+                        "enum": [
+                            "SNAPSHOT_REPLAY",
+                            "FULL_REPLAY"
+                        ]
+                    },
+                    "snapshotSeq": {
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    "replayedEvents": {
+                        "type": "integer",
+                        "format": "int32"
+                    },
+                    "elapsedMicros": {
+                        "type": "integer",
+                        "format": "int64"
+                    }
+                }
+            },
+            "TimelineResponse": {
+                "type": "object",
+                "properties": {
+                    "sessionId": {
+                        "type": "string",
+                        "format": "uuid"
+                    },
+                    "requestedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "seq": {
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    "stateAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "WAITING",
+                            "ACTIVE",
+                            "INTERRUPTED",
+                            "COMPLETED"
+                        ]
+                    },
+                    "title": {
+                        "type": "string"
+                    },
+                    "createdBy": {
+                        "type": "string"
+                    },
+                    "createdAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "endedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "participants": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ParticipantView"
+                        }
+                    },
+                    "totalMessages": {
+                        "type": "integer",
+                        "format": "int32"
+                    },
+                    "messages": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/MessageView"
+                        }
+                    },
+                    "restore": {
+                        "$ref": "#/components/schemas/RestoreInfo"
+                    }
+                }
+            },
+            "EventPage": {
+                "type": "object",
+                "properties": {
+                    "events": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/SessionEvent"
+                        }
+                    },
+                    "nextAfterSeq": {
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    "headSeq": {
+                        "type": "integer",
+                        "format": "int64"
+                    }
+                }
+            },
+            "SessionEvent": {
+                "type": "object",
+                "properties": {
+                    "sessionId": {
+                        "type": "string",
+                        "format": "uuid"
+                    },
+                    "seq": {
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    "eventId": {
+                        "type": "string",
+                        "format": "uuid"
+                    },
+                    "clientEventId": {
+                        "type": "string"
+                    },
+                    "type": {
+                        "type": "string",
+                        "enum": [
+                            "SESSION_CREATED",
+                            "JOIN",
+                            "LEAVE",
+                            "DISCONNECT",
+                            "RECONNECT",
+                            "MESSAGE",
+                            "MESSAGE_EDITED",
+                            "MESSAGE_DELETED",
+                            "READ",
+                            "SESSION_ENDED"
+                        ]
+                    },
+                    "actorId": {
+                        "type": "string"
+                    },
+                    "payload": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    },
+                    "clientTs": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "serverTs": {
+                        "type": "string",
+                        "format": "date-time"
+                    }
+                }
+            },
+            "DlqEntry": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    "sessionId": {
+                        "type": "string",
+                        "format": "uuid"
+                    },
+                    "targetSeq": {
+                        "type": "integer",
+                        "format": "int64"
+                    },
+                    "attempts": {
+                        "type": "integer",
+                        "format": "int32"
+                    },
+                    "lastError": {
+                        "type": "string"
+                    },
+                    "failedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "resolvedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    }
+                }
+            }
+        }
+    }
+}

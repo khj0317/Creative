@@ -1,0 +1,82 @@
+server:
+  port: ${PORT:8080}
+  shutdown: graceful
+
+spring:
+  application:
+    name: realtime-session-replay
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5440/chat}
+    username: ${DB_USERNAME:chat}
+    password: ${DB_PASSWORD:chat}
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:30}   # 부하 테스트 기준(docs/load-test.md). 인스턴스 수 x 풀 < max_connections
+      connection-timeout: 3000      # 커넥션 고갈 시 3초 안에 실패시켜 요청이 쌓이지 않게 한다
+      leak-detection-threshold: 10000
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6390}
+  lifecycle:
+    timeout-per-shutdown-phase: 10s
+  task:
+    scheduling:
+      pool:
+        size: 4        # 워커가 느려져도 하트비트/안전망이 밀리지 않게(하트비트 지연 = 다른 인스턴스의 오탐 정리)
+  threads:
+    virtual:
+      enabled: false   # JDK 21 가상 스레드의 synchronized pinning 위험을 피해 플랫폼 스레드 사용(JDK 24+ 에서 재검토)
+
+chat:
+  instance-id: ${INSTANCE_ID:}           # 비어 있으면 hostname + 랜덤 값
+  broadcast:
+    mode: ${BROADCAST_MODE:local}         # local(단일 인스턴스) | redis(수평 확장)
+  presence:
+    heartbeat-interval: 5000              # ms. @Scheduled 에서도 그대로 쓰므로 숫자(ms)로 둔다
+    instance-timeout: 20s                 # 하트비트가 이 시간 이상 끊긴 인스턴스의 연결은 DISCONNECT 처리
+    reaper-interval: 10000                # ms
+  projection:
+    poll-interval: 300                    # ms
+    batch-size: 50
+    events-per-run: 1000
+    lease: 30s
+    max-attempts: 5
+    backoff-base: 500ms
+    backoff-max: 60s
+  snapshot:
+    interval: ${SNAPSHOT_INTERVAL:100}    # N개 이벤트마다 자동 스냅샷
+  replay:
+    page-size: 1000
+    default-message-limit: 50
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  health:
+    redis:
+      enabled: ${REDIS_HEALTH:false}
+  metrics:
+    tags:
+      application: ${spring.application.name}
+      instance: ${chat.instance-id:local}
+    distribution:
+      percentiles-histogram:
+        chat.events.append: true
+        chat.timeline.restore: true
+        http.server.requests: true
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+logging:
+  pattern:
+    console: "%d{HH:mm:ss.SSS} %-5level [%thread] [req=%X{requestId:-} session=%X{sessionId:-} user=%X{userId:-}] %logger{36} - %msg%n"
