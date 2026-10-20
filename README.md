@@ -50,6 +50,46 @@ docker compose --profile observability up -d   # Prometheus(9090) + Grafana(http
 | `TimelineAndProjectionIntegrationTest` | 시점 복원(수정 전/후, 퇴장, unread), 모든 seq 에서 AUTO==FULL, 비동기 프로젝션, **장애 주입 → 재시도 → DLQ → redrive**, 재구축 결과 동일 |
 | `WebSocketIntegrationTest` | 실시간 전달과 ack/중복, typing, **끊김 → INTERRUPTED → lastSeq resume(빈틈·중복 없이)**, 연결 인계, **장애 인스턴스 reaper**, 초대받지 않은 사용자 거부 |
 
+### 수동 검증 (Postman / WebSocket 클라이언트)
+- **Postman**: Import → File → `docs/openapi.yaml` 을 가져오면 모든 REST API 가 컬렉션으로 만들어진다. `X-User-Id` 헤더에 사용자 이름을 넣고 호출한다.
+- **WebSocket**: Postman 의 WebSocket 요청이나 `wscat` 으로 `ws://localhost:8080/ws/sessions/{id}?userId=alice` 에 연결하고 `{"type":"send","clientEventId":"m1","payload":{"content":"hi"}}` 를 보낸다. 재전송, resume, 백오프까지 들어간 대화형 클라이언트는 `node scripts/chat-cli.mjs` 다.
+
+---
+
+## 환경 구성
+
+| 구성 요소 | 버전 | 로컬 포트 | 비고 |
+|---|---|---|---|
+| Java | 21 | — | Gradle 9 wrapper 포함 |
+| PostgreSQL | 17 | 5440 | `docker compose up -d postgres`, 스키마는 기동 시 Flyway 가 생성 |
+| Redis | 7 | 6390 | `BROADCAST_MODE=redis` 일 때만 사용 |
+| 애플리케이션 | Spring Boot 4.1 | 8080 (클러스터: 8081, 8082, LB 8088) | |
+| Prometheus / Grafana | 2.55 / 11.3 | 9090 / 3300 | `--profile observability` |
+| Node | 22+ | — | 재현/CLI 스크립트(의존성 없음) |
+
+환경 변수(괄호는 기본값):
+
+| 변수 | 설명 |
+|---|---|
+| `PORT` (8080) | HTTP/WebSocket 포트 |
+| `DB_URL` (`jdbc:postgresql://localhost:5440/chat`), `DB_USERNAME` / `DB_PASSWORD` (chat/chat) | PostgreSQL 접속 |
+| `DB_POOL_SIZE` (30) | Hikari 풀 크기. 인스턴스 수 × 풀 크기 < `max_connections` |
+| `BROADCAST_MODE` (`local`) | `local` = 단일 인스턴스, `redis` = Redis Pub/Sub 로 인스턴스 간 전달(수평 확장) |
+| `REDIS_HOST` / `REDIS_PORT` (localhost/6390), `REDIS_HEALTH` (false) | Redis 접속, 헬스체크 포함 여부 |
+| `INSTANCE_ID` (hostname + 랜덤) | 하트비트/reaper/워커 lease 의 인스턴스 식별자 |
+| `SNAPSHOT_INTERVAL` (100) | 자동 스냅샷 주기(seq 가 이 값의 배수일 때) |
+
+그 밖의 튜닝 값(워커 주기, 재시도 횟수와 백오프, 인스턴스 타임아웃 등)은 [`application.yml`](src/main/resources/application.yml) 의 `chat.*` 에 있다.
+
+### 기술 스택 선택 근거 (요약)
+- **Java 21 + Spring Boot**: WebSocket, JDBC, Actuator, Micrometer 를 한 생태계에서 성숙하게 쓸 수 있다.
+- **PostgreSQL**: 트랜잭션과 행 잠금으로 **세션 단위 seq 직렬화**를 단순하게 구현하고, `FOR UPDATE SKIP LOCKED` 로 DB 만으로 작업 큐(outbox)를 만든다. JSONB, 부분/표현식 인덱스도 쓴다.
+- **JdbcClient(SQL 직접 작성)**: append-only 로그와 범위 조회, CTE 를 그대로 통제하고 실행 계획으로 설명하기 위해서다.
+- **순수 WebSocket**: seq/ack/resume 을 직접 제어해야 해서 STOMP 브로커 의미론을 쓰지 않았다.
+- **Redis Pub/Sub**: 가볍고 지연이 낮다. 내구성은 DB 가 보장하므로 Kafka/Streams 는 과하다.
+
+자세한 비교와 버린 대안은 [design.md §1](docs/design.md#기술-선택-근거)에 있다. **가정**(인증 대체, 1:1 정원, 상태 정의, 시각 정밀도 등)은 [design.md §9](docs/design.md#9-가정-assumptions)에 모아 두었다.
+
 ---
 
 ## 과제 요구사항 대응표
@@ -65,15 +105,19 @@ docker compose --profile observability up -d   # Prometheus(9090) + Grafana(http
 | 순서 기준 | **서버가 세션 행 잠금 안에서 부여하는 `seq`**. `server_ts` 는 seq 와 함께 비감소. 클라이언트 시각은 참고용. 인과 역전(수정이 원본보다 먼저)은 재시도 가능 오류로 거절 |
 | 특정 시점 복원 | `GET /sessions/{id}/timeline?at=` 또는 `?atSeq=` (스냅샷 + 리플레이, `mode=FULL` 검증) |
 
-### 4.2 필수 설계/문서
+### 4.2 ~ 4.4 필수 설계/문서
 | 요구 | 위치 |
 |---|---|
+| 순서 기준 정의(2.2) / 중복 처리 전략(2.1) | [docs/design.md §2~§3](docs/design.md#2-순서-보장-순서-뒤바뀜-대응) |
+| 기술 스택 선택 근거(3) / 가정(7) | [design.md §1](docs/design.md#기술-선택-근거) / [design.md §9](docs/design.md#9-가정-assumptions) |
 | ERD, 핵심 DDL, 인덱스 근거, 정규화/JSONB 트레이드오프 | [docs/database.md](docs/database.md), [V1__init.sql](src/main/resources/db/migration/V1__init.sql) |
 | REST API 스펙(OpenAPI) | [docs/openapi.yaml](docs/openapi.yaml) (실행 중 `/swagger-ui.html`) |
 | 재연결 정합성 / 수평 확장 / 관측 가능성 / 비동기 처리 | [docs/design.md](docs/design.md) §4~§7 |
 | 장애 시나리오 3종(감지 → 완화 → 복구) | [docs/design.md §8](docs/design.md#8-장애-대응-시나리오-감지--완화--복구) |
 | 복원 방식(전체 vs 스냅샷), 중복/역순 처리, 비용 설계 | [docs/event-sourcing.md](docs/event-sourcing.md) |
-| 주요 쿼리 + 인덱스 + 병목(EXPLAIN 실측) | [docs/database.md §4~§5](docs/database.md#4-주요-쿼리와-인덱스-근거-핫패스) |
+| 4.3 복원 대상(참여자, 메시지 최근 N개, 수정/삭제 상태, unread) | [docs/event-sourcing.md §1](docs/event-sourcing.md#1-복원-대상) |
+| 4.4-(1) 대량 데이터 조회 전략 + SQL + 인덱스 + 병목(EXPLAIN 실측) | [docs/database.md §4~§6](docs/database.md#4-주요-쿼리와-인덱스-근거-핫패스) |
+| 4.4-(2) 비동기 처리(지수 백오프, DLQ, Idempotency, 중복 실행 방지) | [docs/design.md §6](docs/design.md#6-비동기-처리-구조-projection-snapshot-재시도-dlq-idempotency) |
 
 ### 5. 가산점: 추가로 구현한 것
 | 항목 | 내용 |
@@ -93,7 +137,7 @@ docker compose --profile observability up -d   # Prometheus(9090) + Grafana(http
 - 인증/인가(비목표): `X-User-Id` 로 대신한다. 운영 설계는 design.md §9 에 있다.
 - 분산 추적(OpenTelemetry): requestId 상관관계까지만 구현했다. 전파 설계는 design.md §7 에 있다.
 - 시간축 메시지 프로젝션(스냅샷 크기를 메시지 수와 분리): 설계만 했다(event-sourcing.md §6).
-- 이벤트 파티셔닝/아카이빙: 설계만 했다(database.md §5).
+- 이벤트 파티셔닝/아카이빙: 설계만 했다(database.md §5~§6).
 
 ---
 

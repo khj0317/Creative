@@ -87,7 +87,7 @@ flowchart LR
 
 멱등 키 범위를 `(세션, 사용자)` 로 둔 이유: 세션 범위로만 두면 다른 사용자가 같은 키를 보냈을 때 남의 이벤트가 "중복" 으로 반환되는 정보 노출이 생긴다.
 
-**멱등 키 보존 기간**: 이벤트 로그 자체가 멱등 키 저장소라 영구 보존된다. 대신 유니크 인덱스가 크다(이벤트 100만 건 기준 119MB, PK 보다 큼). 대안은 [database.md](database.md#5-예상-병목과-개선-방향)에 정리했다.
+**멱등 키 보존 기간**: 이벤트 로그 자체가 멱등 키 저장소라 영구 보존된다. 대신 유니크 인덱스가 크다(이벤트 100만 건 기준 119MB, PK 보다 큼). 대안은 [database.md](database.md#6-예상-병목과-개선-방향)에 정리했다.
 
 ---
 
@@ -214,6 +214,7 @@ Grafana 대시보드(`infra/grafana/dashboards/chat.json`)는 자동 프로비�
 ## 9. 가정 (Assumptions)
 - 인증/인가는 비목표라 `X-User-Id` 헤더 / `userId` 쿼리로 사용자를 식별한다. 운영에서는 JWT 를 HandshakeInterceptor 와 필터에서 검증한다.
 - 1:1 세션: 동시에 `JOINED` 인 참여자는 최대 2명. `invitees` 를 주면 그 사용자만 참여할 수 있고, 생략하면 선착순 2명이다. 퇴장한 사람은 재참여할 수 있다.
+- 세션의 **시작**은 생성 시점(`SESSION_CREATED`, seq=1, `created_at`)이고, **종료**는 `POST /sessions/{id}/end`(`SESSION_ENDED`, `ended_at`)다. 참여자가 처음 들어온 시각은 각 참여자의 `joinedAt` 으로 따로 복원된다.
 - 세션 상태는 과제의 진행중/중단/완료에 대기(WAITING)를 더했다. 상태 규칙은 `SessionStatus.derive` 하나로 쓰기 모델과 리플레이가 공유한다.
   - `COMPLETED`: 종료됨
   - `WAITING`: 참여 중인 사람 없음
