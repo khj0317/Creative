@@ -13,6 +13,8 @@ public enum ErrorCode {
     EVENT_TYPE_NOT_ALLOWED(HttpStatus.BAD_REQUEST, false),
     /** 수정/삭제 대상 메시지가 아직 도착하지 않았을 수 있다(순서 뒤바뀜). 클라이언트는 재시도한다. */
     TARGET_NOT_FOUND(HttpStatus.UNPROCESSABLE_CONTENT, true),
+    /** 대상 seq 는 이미 지났지만 메시지 이벤트가 아님(재시도해도 성공할 수 없음) */
+    TARGET_NOT_A_MESSAGE(HttpStatus.BAD_REQUEST, false),
     TARGET_NOT_OWNED(HttpStatus.FORBIDDEN, false),
     TARGET_DELETED(HttpStatus.CONFLICT, false),
     NO_STATE_AT(HttpStatus.NOT_FOUND, false),

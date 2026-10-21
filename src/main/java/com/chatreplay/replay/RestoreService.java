@@ -66,7 +66,7 @@ public class RestoreService {
     public Restored restoreAtSeq(UUID sessionId, long atSeq, boolean useSnapshot) {
         SessionRow session = requireSession(sessionId);
         if (atSeq < 1) {
-            throw new ApiException(ErrorCode.NO_STATE_AT, "atSeq 는 1 이상이어야 합니다.");
+            throw new ApiException(ErrorCode.INVALID_REQUEST, "atSeq 는 1 이상이어야 합니다.");
         }
         return restore(sessionId, Math.min(atSeq, session.lastSeq()), useSnapshot);
     }

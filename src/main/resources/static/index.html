@@ -134,7 +134,11 @@
 <script>
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const uuid = () => crypto.randomUUID();
+// crypto.randomUUID 는 보안 컨텍스트(https, localhost)에서만 있다. IP 로 접속한 경우를 위한 대체 구현
+const uuid = () => crypto.randomUUID?.() ?? 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+  const r = Math.random() * 16 | 0;
+  return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+});
 const time = (t) => t ? new Date(t).toLocaleTimeString() : '';
 let sid = null;
 

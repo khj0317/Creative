@@ -281,6 +281,28 @@ class WebSocketIntegrationTest extends IntegrationTest {
     }
 
     @Test
+    void lastSeqBeyondHeadIsClampedSoClientStillReceivesEvents() throws Exception {
+        UUID sid = createSession("alice", List.of("alice", "bob"));
+        Client alice = new Client().connect(sid, "alice", null);
+        alice.await(f -> f.get("type").asString().equals("welcome"));
+        // 잘못된(미래) lastSeq 로 접속해도 이후 이벤트를 받아야 한다
+        Client bob = new Client().connect(sid, "bob", 9999L);
+        JsonNode welcome = bob.await(f -> f.get("type").asString().equals("welcome"));
+        assertThat(welcome.get("resumeFromSeq").asLong()).isEqualTo(welcome.get("headSeq").asLong());
+
+        alice.send(Map.of("type", "send", "clientEventId", "after-stale", "payload", Map.of("content", "hello")));
+        assertThat(bob.awaitEvent("MESSAGE").get("payload").get("content").asString()).isEqualTo("hello");
+
+        // resume 프레임도 같은 규칙
+        bob.send(Map.of("type", "resume", "lastSeq", 9999));
+        Thread.sleep(200);
+        alice.send(Map.of("type", "send", "clientEventId", "after-resume", "payload", Map.of("content", "again")));
+        assertThat(bob.awaitEvent("MESSAGE").get("payload").get("content").asString()).isEqualTo("again");
+        alice.close();
+        bob.close();
+    }
+
+    @Test
     void rejectsUninvitedUser() throws Exception {
         UUID sid = createSession("alice", List.of("alice", "bob"));
         Client mallory = new Client().connect(sid, "mallory", null);

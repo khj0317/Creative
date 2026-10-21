@@ -78,6 +78,11 @@ function connect() {
   };
   ws.onclose = (ev) => {
     if (quitting) return;
+    // 재연결하면 안 되는 종료: 다른 연결로 대체(4001), 퇴장, 연결 거부(44xx)
+    if (ev.code === 4001 || ev.reason === 'left the session' || (ev.code >= 4400 && ev.code < 4500)) {
+      log(`** 연결 종료(${ev.code} ${ev.reason}) → 재연결하지 않음. :quit 로 종료`);
+      return;
+    }
     const delay = Math.min(30000, 500 * 2 ** attempt++) * (0.5 + Math.random() / 2);
     log(`** 연결 끊김(${ev.code}) → ${Math.round(delay)}ms 후 재연결 (lastSeq=${lastSeq})`);
     setTimeout(connect, delay);

@@ -1,5 +1,8 @@
 package com.chatreplay.common;
 
+import java.util.List;
+import java.util.Map;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessResourceFailureException;
@@ -25,9 +28,29 @@ public class GlobalExceptionHandler {
         return problem(e.code(), e.getMessage());
     }
 
-    @ExceptionHandler({MethodArgumentNotValidException.class, HttpMessageNotReadableException.class,
-            MethodArgumentTypeMismatchException.class, IllegalArgumentException.class})
-    public ProblemDetail handleBadRequest(Exception e) {
+    /** 검증 실패: 내부 메서드 시그니처 대신 필드별 메시지를 돌려준다. */
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ProblemDetail handleValidation(MethodArgumentNotValidException e) {
+        List<Map<String, String>> errors = e.getBindingResult().getFieldErrors().stream()
+                .map(f -> Map.of("field", f.getField(), "message", String.valueOf(f.getDefaultMessage())))
+                .toList();
+        ProblemDetail pd = problem(ErrorCode.INVALID_REQUEST, "요청 값이 올바르지 않습니다.");
+        pd.setProperty("errors", errors);
+        return pd;
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ProblemDetail handleUnreadable(HttpMessageNotReadableException e) {
+        return problem(ErrorCode.INVALID_REQUEST, "요청 본문을 읽을 수 없습니다(JSON 형식이나 허용되지 않는 값, 예: 이벤트 type).");
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ProblemDetail handleTypeMismatch(MethodArgumentTypeMismatchException e) {
+        return problem(ErrorCode.INVALID_REQUEST, "파라미터 '" + e.getName() + "' 값이 올바르지 않습니다: " + e.getValue());
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ProblemDetail handleBadRequest(IllegalArgumentException e) {
         return problem(ErrorCode.INVALID_REQUEST, e.getMessage());
     }
 

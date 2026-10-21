@@ -59,7 +59,7 @@ flowchart LR
 | 상황 | 처리 |
 |---|---|
 | 서로 독립적인 메시지 A, B 가 B→A 순으로 도착 | 도착(커밋) 순서대로 seq 부여. "서버가 받은 순서" 가 대화의 정답이며 모든 참여자가 같은 순서를 본다 |
-| **수정/삭제가 원본보다 먼저 도착** | `TARGET_NOT_FOUND`(422, `retryable=true`) 로 거절. 클라이언트가 같은 `clientEventId` 로 재시도하면 원본 저장 뒤 정상 반영 |
+| **수정/삭제가 원본보다 먼저 도착** | `TARGET_NOT_FOUND`(422, `retryable=true`) 로 거절. 클라이언트가 같은 `clientEventId` 로 재시도하면 원본 저장 뒤 정상 반영. 반면 이미 지나간 seq 인데 메시지가 아닌 경우는 재시도해도 소용없으므로 `TARGET_NOT_A_MESSAGE`(400, `retryable=false`)로 구분한다 |
 | 오래된 READ(읽음 위치)가 늦게 도착 | `lastReadSeq = max(현재, upToSeq)` 라 되돌아가지 않음(교환/멱등 연산) |
 | 배치 수집 `POST /events` | 배열 순서대로 처리하고 항목별 결과를 반환. 앞 항목 실패가 뒤 항목을 막지 않음 |
 

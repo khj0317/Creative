@@ -114,6 +114,26 @@ class EventIngestIntegrationTest extends IntegrationTest {
     }
 
     @Test
+    void editOfNonMessageSeqIsNotRetryable() {
+        UUID sid = createSession("alice", List.of("alice", "bob"));
+        join(sid, "alice");
+        // seq 1 은 SESSION_CREATED: 이미 지나간 seq 라 기다려도 메시지가 되지 않는다
+        JsonNode r = sendEvent(sid, "alice", "edit-created", "MESSAGE_EDITED", Map.of("targetSeq", 1, "content", "x"));
+        assertThat(r.get("code").asString()).isEqualTo("TARGET_NOT_A_MESSAGE");
+        assertThat(r.get("retryable").asBoolean()).isFalse();
+    }
+
+    @Test
+    void validationErrorsAreReadable() {
+        UUID sid = createSession("alice", List.of("alice", "bob"));
+        Res r = post("/sessions/" + sid + "/events", "alice", Map.of("events", List.of(
+                Map.of("type", "MESSAGE", "payload", Map.of("content", "x")))));   // clientEventId 누락
+        assertThat(r.status()).isEqualTo(400);
+        assertThat(r.body().get("detail").asString()).doesNotContain("public ");
+        assertThat(r.body().get("errors").get(0).get("field").asString()).contains("clientEventId");
+    }
+
+    @Test
     void rejectsNegativeReadPosition() {
         UUID sid = createSession("alice", List.of("alice", "bob"));
         join(sid, "alice");

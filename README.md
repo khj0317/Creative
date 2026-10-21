@@ -48,9 +48,9 @@ docker compose --profile observability up -d   # Prometheus(9090) + Grafana(http
 | 테스트 | 검증 내용 |
 |---|---|
 | `SessionStateReducerTest` | 리듀서 결정성: 중복/역순 입력 무시, seq 빈틈은 실패, **모든 지점의 스냅샷+리플레이 == 전체 리플레이**, 무작위 대화 50개 |
-| `EventIngestIntegrationTest` | 멱등 재전송, **같은 메시지 40개를 3번씩 동시 전송(120건) → 40개만 저장, seq 빈틈 없음**, 수정이 원본보다 먼저 오는 경우, 배치 항목별 결과, 1:1 정원과 초대, 종료 멱등, 목록 필터와 커서 |
+| `EventIngestIntegrationTest` | 멱등 재전송, 재시도 가능/불가 오류 구분, 입력 검증, **같은 메시지 40개를 3번씩 동시 전송(120건) → 40개만 저장, seq 빈틈 없음**, 수정이 원본보다 먼저 오는 경우, 배치 항목별 결과, 1:1 정원과 초대, 종료 멱등, 목록 필터와 커서 |
 | `TimelineAndProjectionIntegrationTest` | 시점 복원(수정 전/후, 퇴장, unread), 모든 seq 에서 AUTO==FULL, 비동기 프로젝션, **장애 주입 → 재시도 → DLQ → redrive**, 재구축 결과 동일 |
-| `WebSocketIntegrationTest` | 실시간 전달과 ack/중복, typing, **끊김 → INTERRUPTED → lastSeq resume(빈틈·중복 없이)**, 연결 인계, **퇴장 시 해당 사용자의 모든 연결 종료**, **장애 인스턴스 reaper**, 초대받지 않은 사용자 거부 |
+| `WebSocketIntegrationTest` | 실시간 전달과 ack/중복, typing, **끊김 → INTERRUPTED → lastSeq resume(빈틈·중복 없이)**, 연결 인계, **퇴장 시 해당 사용자의 모든 연결 종료**, 잘못된 lastSeq 제한, **장애 인스턴스 reaper**, 초대받지 않은 사용자 거부 |
 
 GitHub Actions 가 push 마다 같은 테스트를 실행한다(상단 배지).
 

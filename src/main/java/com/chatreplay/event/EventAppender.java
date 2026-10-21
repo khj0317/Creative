@@ -229,10 +229,13 @@ public class EventAppender {
         long target = longValue(in, "targetSeq");
         // 대상 메시지가 아직 없다 = 원본보다 수정/삭제가 먼저 도착한 순서 뒤바뀜.
         // 재시도 가능한 오류로 거절하고, 원본이 저장된 뒤 클라이언트가 재전송하면 정상 반영된다.
-        SessionEvent original = target > session.lastSeq() ? null
-                : events.findBySeq(cmd.sessionId(), target).orElse(null);
+        if (target > session.lastSeq()) {
+            throw new ApiException(ErrorCode.TARGET_NOT_FOUND, "대상 메시지(seq=" + target + ")가 아직 없습니다.");
+        }
+        // 이미 지나간 seq 인데 메시지가 아니면 재시도해도 성공할 수 없으므로 재시도 불가 오류로 구분한다.
+        SessionEvent original = events.findBySeq(cmd.sessionId(), target).orElse(null);
         if (original == null || original.type() != EventType.MESSAGE) {
-            throw new ApiException(ErrorCode.TARGET_NOT_FOUND, "대상 메시지(seq=" + target + ")가 없습니다.");
+            throw new ApiException(ErrorCode.TARGET_NOT_A_MESSAGE, "seq=" + target + " 는 메시지가 아닙니다.");
         }
         if (!original.actorId().equals(cmd.actorId())) {
             throw new ApiException(ErrorCode.TARGET_NOT_OWNED, "본인이 보낸 메시지만 수정/삭제할 수 있습니다.");

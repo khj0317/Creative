@@ -133,9 +133,13 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         welcome.put("headSeq", result.headSeq());
         welcome.put("status", result.status());
         welcome.put("instance", instanceId.value());
+        // 클라이언트가 준 lastSeq 가 서버 head 보다 크면(다른 세션 값, 로컬 저장소 오염 등) head 로 제한한다.
+        // 그대로 두면 이후 이벤트를 모두 "이미 보낸 것" 으로 보고 버려, 연결은 살아 있는데 아무것도 받지 못한다.
+        long resumeFrom = Math.min(conn.lastSentSeq(), result.headSeq());
+        welcome.put("resumeFromSeq", resumeFrom);
         conn.send(welcome);
         // 4) resume: 시작 위치 이후 이벤트를 순서대로 보낸 뒤 실시간 전송으로 이어진다.
-        conn.resumeFrom(conn.lastSentSeq());
+        conn.resumeFrom(resumeFrom);
         log.info("ws connected (headSeq={}, resumeFrom={})", result.headSeq(), hs.lastSeq());
     }
 
@@ -158,7 +162,10 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                 case "send" -> handleSend(conn, frame);
                 case "typing" -> broadcaster.publish(BroadcastEnvelope.typing(conn.sessionId(), conn.userId(),
                         Boolean.TRUE.equals(frame.get("isTyping")), conn.connectionId(), instanceId.value()));
-                case "resume" -> conn.resumeFrom(toLong(frame.get("lastSeq"), 0L));
+                case "resume" -> {
+                    long head = sessions.findById(conn.sessionId()).map(s -> s.lastSeq()).orElse(0L);
+                    conn.resumeFrom(Math.max(0, Math.min(toLong(frame.get("lastSeq"), 0L), head)));
+                }
                 case "ping" -> conn.send(Map.of("type", "pong",
                         "headSeq", sessions.findById(conn.sessionId()).map(s -> s.lastSeq()).orElse(0L),
                         "lastSentSeq", conn.lastSentSeq()));
