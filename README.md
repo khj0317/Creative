@@ -54,6 +54,19 @@ docker compose --profile observability up -d   # Prometheus(9090) + Grafana(http
 
 GitHub Actions 가 push 마다 같은 테스트를 실행한다(상단 배지).
 
+### 브라우저 테스트 콘솔 (터미널 없이)
+
+서버를 켠 뒤 **http://localhost:8080** 을 열면 동작 검증용 테스트 화면이 나온다. 과제 범위의 UI 가 아니라, 필수 기능 7개를 버튼으로 확인하기 위한 WebSocket 테스트 클라이언트다.
+
+1. 「새 세션 만들기」를 누른 뒤 alice 와 bob 창에서 각각 「연결」을 누른다 → **join**, **실시간 송수신**(메시지 옆에 서버가 부여한 seq 표시)
+2. bob 창에서 「연결 끊기」를 누르면 상단 상태가 `INTERRUPTED`, bob 이 `DISCONNECTED` 가 된다. 「이어서 연결(resume)」을 누르면 놓친 메시지를 순서대로 받고 `ACTIVE` 로 돌아온다 → **presence**
+3. 「같은 키로 재전송」을 누르거나 ④ 에서 같은 키로 POST /events 를 두 번 보내면 `DUPLICATE` + 같은 seq 가 나오고 로그에는 1건만 남는다 → **수집 API**, **중복 방지**
+4. 「원본보다 먼저 도착한 '수정' 보내기」를 누르면 `TARGET_NOT_FOUND`(재시도 가능)로 거절된다 → **순서 기준**
+5. ⑤ 의 슬라이더를 움직이면 그 seq 시점의 참여자, presence, 메시지(수정·삭제 반영), 안 읽은 수가 복원된다 → **시점 복원**
+6. 「퇴장」을 누르면 LEAVE 가 기록되고 연결이 닫힌다 → **leave**
+
+![테스트 콘솔](docs/images/test-console.jpg)
+
 ### 수동 검증 (Postman / WebSocket 클라이언트)
 - **Postman**: Import → File → `docs/openapi.yaml` 을 가져오면 모든 REST API 가 컬렉션으로 만들어진다. `X-User-Id` 헤더에 사용자 이름을 넣고 호출한다.
 - **WebSocket**: Postman 의 WebSocket 요청이나 `wscat` 으로 `ws://localhost:8080/ws/sessions/{id}?userId=alice` 에 연결하고 `{"type":"send","clientEventId":"m1","payload":{"content":"hi"}}` 를 보낸다. 재전송, resume, 백오프까지 들어간 대화형 클라이언트는 `node scripts/chat-cli.mjs` 다.
@@ -135,7 +148,7 @@ GitHub Actions 가 push 마다 같은 테스트를 실행한다(상단 배지).
 | **운영 대시보드** | Grafana 대시보드 + 커스텀 메트릭 14종 ([캡처](docs/images/grafana-dashboard.jpg)) |
 | **장애 주입/재현** | 인스턴스 강제 종료 스크립트, 프로젝션 장애 주입 API(`/admin/faults/...`), 시나리오 재현 스크립트 |
 | **추가 통신 방식 비교** | WebSocket / SSE / Long Polling / WebRTC ([design.md §10](docs/design.md#10-추가-통신-방식-검토-websocket-vs-sse-vs-long-polling-vs-webrtc)) |
-| 기타 | unread count, 메시지 수정/삭제 복원, typing(휘발성), 대화형 CLI 클라이언트(`scripts/chat-cli.mjs`) |
+| 기타 | unread count, 메시지 수정/삭제 복원, typing(휘발성), 브라우저 테스트 콘솔(`http://localhost:8080`), 대화형 CLI 클라이언트(`scripts/chat-cli.mjs`) |
 
 ### 구현하지 않은 것 (설계로 대체)
 - 인증/인가(비목표): `X-User-Id` 로 대신한다. 운영 설계는 design.md §9 에 있다.

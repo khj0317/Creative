@@ -1,0 +1,433 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Session Replay 테스트 콘솔</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #fff; --text: #1d2330; --muted: #6b7280; --line: #e3e6ea;
+    --accent: #2f6fde; --ok: #1f9d55; --warn: #c27c0e; --bad: #d64545; --me: #e8f0fe; --other: #f1f3f5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14171c; --panel: #1c2027; --text: #e6e8eb; --muted: #9aa3ae; --line: #2c323b;
+      --accent: #6d9bf1; --ok: #4cc38a; --warn: #e5a93b; --bad: #f07070; --me: #23324d; --other: #262b33;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 system-ui, "Malgun Gothic", sans-serif; }
+  header { padding: 14px 20px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  header h1 { margin: 0; font-size: 18px; }
+  header p { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+  main { padding: 16px 20px; display: grid; gap: 16px; max-width: 1400px; margin: 0 auto; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .card h2 { margin: 0 0 10px; font-size: 15px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } }
+  input, select { font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--text); }
+  input[type=range] { padding: 0; flex: 1; }
+  button { font: inherit; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--text); cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: .45; cursor: default; }
+  .muted { color: var(--muted); font-size: 12px; }
+  .tag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1px solid currentColor; }
+  .ONLINE, .ACTIVE, .APPENDED, .CREATED { color: var(--ok); }
+  .DISCONNECTED, .INTERRUPTED, .DUPLICATE, .SKIPPED { color: var(--warn); }
+  .OFFLINE, .WAITING, .LEFT { color: var(--muted); }
+  .COMPLETED, .ERROR, .REJECTED { color: var(--bad); }
+  .chat { height: 300px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; padding: 8px; background: var(--bg); }
+  .msg { margin: 4px 0; padding: 6px 10px; border-radius: 8px; background: var(--other); max-width: 85%; word-break: break-word; }
+  .msg.me { background: var(--me); margin-left: auto; }
+  .msg .meta { font-size: 11px; color: var(--muted); }
+  .msg .acts button { padding: 0 6px; font-size: 11px; margin-left: 4px; }
+  .sys { text-align: center; font-size: 12px; color: var(--muted); margin: 4px 0; }
+  .sys.err { color: var(--bad); }
+  .sys.dup { color: var(--warn); }
+  .deleted { font-style: italic; color: var(--muted); }
+  .typing { height: 18px; font-size: 12px; color: var(--muted); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; }
+  .scroll { max-height: 260px; overflow-y: auto; }
+  code { font-size: 12px; }
+  .help li { margin: 2px 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Session Replay 테스트 콘솔</h1>
+  <p>1:1 실시간 채팅 · presence · 중복/순서 처리 · 특정 시점 상태 복원을 브라우저에서 확인하는 테스트 클라이언트(과제 범위의 UI 가 아니라 동작 검증용)</p>
+</header>
+<main>
+
+  <section class="card">
+    <h2>① 세션</h2>
+    <div class="row">
+      <input id="title" value="테스트 세션" size="12">
+      <input id="invA" value="alice" size="8"> <input id="invB" value="bob" size="8">
+      <button class="primary" id="create">새 세션 만들기</button>
+      <span class="muted">또는</span>
+      <input id="sid" placeholder="기존 세션 ID 붙여넣기" size="38">
+      <button id="useSid">이 세션 사용</button>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <span>상태 <span id="sStatus" class="tag">-</span></span>
+      <span class="muted">head seq <b id="sHead">-</b></span>
+      <span id="sParts" class="row"></span>
+      <button id="endBtn" disabled>세션 종료</button>
+    </div>
+  </section>
+
+  <section class="grid2" id="clients"></section>
+
+  <section class="grid2">
+    <div class="card">
+      <h2>④ 중복 · 순서 뒤바뀜 실험 (REST 수집 API)</h2>
+      <div class="row">
+        <select id="xUser"><option>alice</option><option>bob</option></select>
+        <input id="xKey" value="dup-1" size="10" title="clientEventId(멱등 키)">
+        <input id="xText" value="같은 키로 두 번 보내 보세요" size="22">
+        <button id="xSend">POST /events</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button id="xEarly">원본보다 먼저 도착한 '수정' 보내기</button>
+        <span class="muted">존재하지 않는 seq(head+5)를 수정 → TARGET_NOT_FOUND(재시도 가능)</span>
+      </div>
+      <div id="xResult" class="scroll" style="margin-top:8px"></div>
+    </div>
+
+    <div class="card">
+      <h2>⑤ 특정 시점 상태 복원 (timeline)</h2>
+      <div class="row">
+        <span>atSeq</span>
+        <input type="range" id="tSeq" min="1" max="1" value="1">
+        <b id="tSeqLabel">1</b>
+        <label class="muted"><input type="checkbox" id="tFull"> 전체 리플레이(FULL)</label>
+      </div>
+      <div class="muted" id="tInfo" style="margin:6px 0">세션을 만들면 표시됩니다.</div>
+      <div id="tParts"></div>
+      <div id="tMsgs" class="scroll" style="margin-top:6px"></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>⑥ 이벤트 로그 (서버에 저장된 순서 = seq)</h2>
+    <div class="scroll"><table><thead><tr><th>seq</th><th>type</th><th>actor</th><th>payload</th><th>clientEventId</th><th>serverTs</th></tr></thead><tbody id="evRows"></tbody></table></div>
+  </section>
+
+  <section class="card help">
+    <h2>무엇을 확인하나요?</h2>
+    <ol>
+      <li><b>실시간 송수신</b>: 두 창 모두 「연결」 후 메시지를 보내면 상대 창에 바로 나타납니다(ack 로 seq 확인).</li>
+      <li><b>join / leave</b>: 연결하면 자동 참여(JOIN), 「퇴장」을 누르면 LEAVE 기록 후 연결이 닫힙니다.</li>
+      <li><b>presence</b>: 「연결 끊기」 → 상단 상태가 <span class="tag INTERRUPTED">INTERRUPTED</span>, 참여자는 DISCONNECTED. 「이어서 연결(resume)」 → 끊긴 동안의 메시지를 순서대로 받고 ACTIVE 로 복귀.</li>
+      <li><b>수집 API</b>: ④ 의 POST /events 로 메시지를 넣으면 채팅 창에도 실시간으로 뜹니다.</li>
+      <li><b>중복 방지</b>: 같은 키로 두 번 보내면 두 번째는 <span class="tag DUPLICATE">DUPLICATE</span> + 같은 seq, 로그에도 1건만. 채팅 창의 「같은 키로 재전송」도 동일.</li>
+      <li><b>순서 기준</b>: 서버가 부여한 seq 가 유일한 순서. 「원본보다 먼저 도착한 수정」은 재시도 가능한 오류로 거절됩니다.</li>
+      <li><b>시점 복원</b>: ⑤ 의 슬라이더를 움직이면 그 seq 시점의 참여자/presence/메시지(수정·삭제 반영)/안 읽은 수가 복원됩니다.</li>
+    </ol>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const uuid = () => crypto.randomUUID();
+const time = (t) => t ? new Date(t).toLocaleTimeString() : '';
+let sid = null;
+
+async function api(method, path, user, body) {
+  const res = await fetch(path, {
+    method,
+    headers: { 'Content-Type': 'application/json', ...(user ? { 'X-User-Id': user } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const text = await res.text();
+  return { status: res.status, body: text ? JSON.parse(text) : null };
+}
+
+// ---------- 채팅 클라이언트 ----------
+class ChatClient {
+  constructor(user, side) {
+    this.user = user; this.lastSeq = null; this.ws = null; this.lastKey = null; this.lastPayload = null;
+    this.messages = new Map(); // seq → {sender, content, status}
+    const el = document.createElement('div');
+    el.className = 'card';
+    el.innerHTML = `
+      <h2>${side === 'a' ? '②' : '③'} <input class="u" value="${esc(user)}" size="8"> 의 채팅창
+        <span class="tag OFFLINE st">연결 안 됨</span> <span class="muted ls"></span></h2>
+      <div class="row">
+        <button class="primary conn">연결</button>
+        <button class="resume" disabled title="마지막으로 받은 seq 를 lastSeq 로 보내 놓친 이벤트를 다시 받음">이어서 연결(resume)</button>
+        <button class="drop" disabled title="연결을 끊습니다(서버에는 DISCONNECT 로 기록)">연결 끊기</button>
+        <button class="leave" disabled>퇴장</button>
+        <button class="read" disabled>모두 읽음</button>
+      </div>
+      <div class="chat" style="margin-top:8px"></div>
+      <div class="typing"></div>
+      <div class="row">
+        <input class="text" placeholder="메시지 입력 후 Enter" style="flex:1" disabled>
+        <button class="send" disabled>보내기</button>
+        <button class="dup" disabled title="방금 보낸 메시지를 같은 clientEventId 로 다시 보냄(네트워크 재전송 시뮬레이션)">같은 키로 재전송</button>
+      </div>`;
+    this.el = el;
+    this.q = (s) => el.querySelector(s);
+    this.q('.u').onchange = (e) => { this.user = e.target.value.trim(); };
+    this.q('.conn').onclick = () => this.connect(null);
+    this.q('.resume').onclick = () => this.connect(this.lastSeq ?? 0);
+    this.q('.drop').onclick = () => this.ws?.close(1000, 'drop');
+    this.q('.leave').onclick = () => this.send('LEAVE', {});
+    this.q('.read').onclick = () => this.send('READ', { upToSeq: this.lastSeq ?? 0 });
+    this.q('.send').onclick = () => this.sendText();
+    this.q('.text').onkeydown = (e) => {
+      if (e.key === 'Enter') this.sendText();
+      else if (this.ws?.readyState === 1) this.ws.send(JSON.stringify({ type: 'typing', isTyping: true }));
+    };
+    this.q('.dup').onclick = () => this.lastKey && this.send('MESSAGE', this.lastPayload, this.lastKey);
+  }
+
+  setConnected(on, label) {
+    const st = this.q('.st');
+    st.className = 'tag st ' + (on ? 'ONLINE' : 'OFFLINE');
+    st.textContent = label ?? (on ? '연결됨' : '연결 안 됨');
+    for (const c of ['.drop', '.leave', '.read', '.send', '.text']) this.q(c).disabled = !on;
+    this.q('.dup').disabled = !on || !this.lastKey;
+    this.q('.conn').disabled = on;
+    this.q('.resume').disabled = on || this.lastSeq == null;
+    this.q('.ls').textContent = this.lastSeq == null ? '' : `lastSeq=${this.lastSeq}`;
+  }
+
+  connect(lastSeq) {
+    if (!sid) return alert('먼저 세션을 만들거나 선택하세요.');
+    if (lastSeq == null) { this.messages.clear(); this.q('.chat').innerHTML = ''; }
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    const url = `${proto}://${location.host}/ws/sessions/${sid}?userId=${encodeURIComponent(this.user)}`
+      + (lastSeq != null ? `&lastSeq=${lastSeq}` : '');
+    const ws = new WebSocket(url);
+    this.ws = ws;
+    ws.onmessage = (m) => this.onFrame(JSON.parse(m.data));
+    ws.onclose = (e) => {
+      if (this.ws !== ws) return;
+      const why = { 1000: '정상 종료', 4001: '다른 연결로 대체/퇴장' }[e.code] ?? `코드 ${e.code}`;
+      this.sys(`연결 종료 (${why}${e.reason ? ': ' + e.reason : ''})`);
+      this.setConnected(false);
+      refresh();
+    };
+  }
+
+  onFrame(f) {
+    switch (f.type) {
+      case 'welcome':
+        this.setConnected(true, `연결됨 @${f.instance}`);
+        this.sys(`연결됨 · 세션 head seq=${f.headSeq}` + (this.lastSeq != null ? ` · seq ${this.lastSeq} 이후부터 이어받기` : ''));
+        break;
+      case 'event':
+        this.lastSeq = f.event.seq;
+        this.applyEvent(f.event);
+        this.setConnected(true, this.q('.st').textContent);
+        refresh();
+        break;
+      case 'ack':
+        if (f.outcome === 'DUPLICATE') this.sys(`↺ 중복 재전송 감지: 저장하지 않음 (처음 부여된 seq=${f.seq})`, 'dup');
+        else if (f.outcome === 'SKIPPED') this.sys('변화 없음(SKIPPED)');
+        break;
+      case 'error':
+        this.sys(`✕ ${f.code}: ${f.message}${f.retryable ? ' (재시도 가능)' : ''}`, 'err');
+        break;
+      case 'typing': {
+        const t = this.q('.typing');
+        t.textContent = `${f.userId} 입력 중…`;
+        clearTimeout(this.typingTimer);
+        this.typingTimer = setTimeout(() => (t.textContent = ''), 1500);
+        break;
+      }
+    }
+  }
+
+  applyEvent(e) {
+    const p = e.payload || {};
+    switch (e.type) {
+      case 'MESSAGE':
+        this.messages.set(e.seq, { seq: e.seq, sender: e.actorId, content: p.content, status: 'SENT', at: e.serverTs });
+        break;
+      case 'MESSAGE_EDITED': {
+        const m = this.messages.get(p.targetSeq);
+        if (m) { m.content = p.content; m.status = 'EDITED'; }
+        break;
+      }
+      case 'MESSAGE_DELETED': {
+        const m = this.messages.get(p.targetSeq);
+        if (m) { m.content = null; m.status = 'DELETED'; }
+        break;
+      }
+      default: {
+        const label = { JOIN: '참여', LEAVE: '퇴장', DISCONNECT: '연결 끊김', RECONNECT: '재연결', READ: `읽음(~${p.upToSeq})`,
+          SESSION_ENDED: '세션 종료', SESSION_CREATED: '세션 생성' }[e.type] ?? e.type;
+        this.sys(`[${e.seq}] ${e.actorId} ${label}`);
+        return;
+      }
+    }
+    this.render(e.type === 'MESSAGE' ? e.seq : p.targetSeq);
+  }
+
+  render(seq) {
+    const m = this.messages.get(seq);
+    if (!m) return;
+    let div = this.q(`[data-seq="${seq}"]`);
+    if (!div) {
+      div = document.createElement('div');
+      div.dataset.seq = seq;
+      this.q('.chat').appendChild(div);
+    }
+    const mine = m.sender === this.user;
+    div.className = 'msg' + (mine ? ' me' : '');
+    const body = m.status === 'DELETED' ? '<span class="deleted">삭제된 메시지</span>' : esc(m.content);
+    div.innerHTML = `<div class="meta">[seq ${m.seq}] ${esc(m.sender)} · ${time(m.at)}${m.status === 'EDITED' ? ' · 수정됨' : ''}
+      ${mine && m.status !== 'DELETED' ? '<span class="acts"><button data-a="edit">수정</button><button data-a="del">삭제</button></span>' : ''}</div>${body}`;
+    div.querySelectorAll('button').forEach((b) => b.onclick = () => {
+      if (b.dataset.a === 'edit') {
+        const t = prompt('수정할 내용', m.content);
+        if (t) this.send('MESSAGE_EDITED', { targetSeq: m.seq, content: t });
+      } else this.send('MESSAGE_DELETED', { targetSeq: m.seq });
+    });
+    this.scroll();
+  }
+
+  sys(text, cls = '') {
+    const d = document.createElement('div');
+    d.className = 'sys ' + cls;
+    d.textContent = text;
+    this.q('.chat').appendChild(d);
+    this.scroll();
+  }
+
+  scroll() { const c = this.q('.chat'); c.scrollTop = c.scrollHeight; }
+
+  sendText() {
+    const input = this.q('.text');
+    const content = input.value.trim();
+    if (!content) return;
+    input.value = '';
+    this.lastKey = uuid();
+    this.lastPayload = { content };
+    this.send('MESSAGE', this.lastPayload, this.lastKey);
+    this.q('.dup').disabled = false;
+  }
+
+  send(eventType, payload, key = uuid()) {
+    if (this.ws?.readyState !== 1) return;
+    this.ws.send(JSON.stringify({ type: 'send', clientEventId: key, eventType, payload, clientTs: new Date().toISOString() }));
+  }
+}
+
+const clients = [new ChatClient('alice', 'a'), new ChatClient('bob', 'b')];
+clients.forEach((c) => { $('clients').appendChild(c.el); c.setConnected(false); });
+
+// ---------- 세션 ----------
+$('create').onclick = async () => {
+  const r = await api('POST', '/sessions', $('invA').value, {
+    title: $('title').value, invitees: [$('invA').value, $('invB').value].filter(Boolean),
+  });
+  if (r.status !== 201) return alert(JSON.stringify(r.body));
+  useSession(r.body.id);
+  clients[0].user = $('invA').value; clients[0].q('.u').value = clients[0].user;
+  clients[1].user = $('invB').value; clients[1].q('.u').value = clients[1].user;
+};
+$('useSid').onclick = () => $('sid').value.trim() && useSession($('sid').value.trim());
+$('endBtn').onclick = async () => { await api('POST', `/sessions/${sid}/end`, clients[0].user); refresh(); };
+
+function useSession(id) {
+  sid = id;
+  $('sid').value = id;
+  history.replaceState(null, '', '?session=' + id);
+  clients.forEach((c) => { c.ws?.close(); c.lastSeq = null; c.messages.clear(); c.q('.chat').innerHTML = ''; c.setConnected(false); });
+  $('xResult').innerHTML = '';
+  $('endBtn').disabled = false;
+  refresh();
+}
+
+let refreshing = null;
+function refresh() {
+  clearTimeout(refreshing);
+  refreshing = setTimeout(doRefresh, 150);
+}
+
+async function doRefresh() {
+  if (!sid) return;
+  const s = (await api('GET', `/sessions/${sid}`)).body;
+  if (!s) return;
+  $('sStatus').textContent = s.status;
+  $('sStatus').className = 'tag ' + s.status;
+  $('sHead').textContent = s.headSeq;
+  $('sParts').innerHTML = s.participants.map((p) =>
+    `<span>${esc(p.userId)} <span class="tag ${p.state === 'LEFT' ? 'LEFT' : p.presence}">${p.state === 'LEFT' ? 'LEFT' : p.presence}</span></span>`).join(' ');
+  const slider = $('tSeq');
+  const atHead = Number(slider.value) >= Number(slider.max);
+  slider.max = s.headSeq;
+  if (atHead) slider.value = s.headSeq;
+  loadTimeline();
+  loadEvents();
+}
+
+// ---------- 중복 / 순서 실험 ----------
+async function ingest(user, events) {
+  const r = await api('POST', `/sessions/${sid}/events`, user, { events });
+  const res = r.body?.results?.[0] ?? { status: 'ERROR', message: JSON.stringify(r.body) };
+  const line = document.createElement('div');
+  line.innerHTML = `<span class="tag ${res.status}">${res.status}</span> key=<code>${esc(events[0].clientEventId)}</code>`
+    + (res.seq != null ? ` seq=<b>${res.seq}</b>` : '')
+    + (res.code ? ` <b>${res.code}</b>` : '') + (res.message ? ` <span class="muted">${esc(res.message)}</span>` : '')
+    + (res.retryable ? ' <span class="muted">(재시도 가능)</span>' : '');
+  $('xResult').prepend(line);
+  refresh();
+}
+$('xSend').onclick = () => sid && ingest($('xUser').value,
+  [{ clientEventId: $('xKey').value, type: 'MESSAGE', payload: { content: $('xText').value } }]);
+$('xEarly').onclick = async () => {
+  if (!sid) return;
+  const head = Number($('sHead').textContent) || 0;
+  ingest($('xUser').value, [{ clientEventId: 'early-' + uuid().slice(0, 8), type: 'MESSAGE_EDITED',
+    payload: { targetSeq: head + 5, content: '원본보다 먼저 온 수정' } }]);
+};
+
+// ---------- 시점 복원 ----------
+$('tSeq').oninput = () => { $('tSeqLabel').textContent = $('tSeq').value; loadTimeline(); };
+$('tFull').onchange = loadTimeline;
+
+async function loadTimeline() {
+  if (!sid) return;
+  const seq = $('tSeq').value;
+  $('tSeqLabel').textContent = seq;
+  const r = await api('GET', `/sessions/${sid}/timeline?atSeq=${seq}&messageLimit=100&mode=${$('tFull').checked ? 'FULL' : 'AUTO'}`);
+  const t = r.body;
+  if (!t || r.status !== 200) { $('tInfo').textContent = t?.detail ?? '복원 실패'; return; }
+  $('tInfo').innerHTML = `seq ${t.seq} 시점(${time(t.stateAt)}) · 상태 <span class="tag ${t.status}">${t.status}</span>`
+    + ` · 메시지 ${t.totalMessages}개 · ${t.restore.strategy === 'SNAPSHOT_REPLAY' ? `스냅샷(seq ${t.restore.snapshotSeq}) + ` : '처음부터 '}`
+    + `이벤트 ${t.restore.replayedEvents}개 리플레이 · ${(t.restore.elapsedMicros / 1000).toFixed(1)}ms`;
+  $('tParts').innerHTML = '<table><tr><th>참여자</th><th>참여</th><th>presence</th><th>읽음 위치</th><th>안 읽은 수</th></tr>'
+    + t.participants.map((p) => `<tr><td>${esc(p.userId)}</td><td><span class="tag ${p.state}">${p.state}</span></td>`
+      + `<td><span class="tag ${p.presence}">${p.presence}</span></td><td>${p.lastReadSeq}</td><td>${p.unreadCount}</td></tr>`).join('')
+    + '</table>';
+  $('tMsgs').innerHTML = t.messages.length ? '<table><tr><th>seq</th><th>보낸 사람</th><th>내용</th><th>상태</th></tr>'
+    + t.messages.map((m) => `<tr><td>${m.seq}</td><td>${esc(m.senderId)}</td>`
+      + `<td>${m.status === 'DELETED' ? '<span class="deleted">삭제됨</span>' : esc(m.content)}</td>`
+      + `<td>${m.status}${m.editCount ? ` (${m.editCount}회 수정)` : ''}</td></tr>`).join('') + '</table>'
+    : '<div class="muted">이 시점에는 메시지가 없습니다.</div>';
+}
+
+// ---------- 이벤트 로그 ----------
+async function loadEvents() {
+  const r = await api('GET', `/sessions/${sid}/events?limit=1000`);
+  const evs = r.body?.events ?? [];
+  $('evRows').innerHTML = evs.slice().reverse().map((e) => `<tr><td><b>${e.seq}</b></td><td>${e.type}</td><td>${esc(e.actorId)}</td>`
+    + `<td><code>${esc(JSON.stringify(e.payload))}</code></td><td><code>${esc(e.clientEventId)}</code></td><td>${time(e.serverTs)}</td></tr>`).join('');
+}
+
+setInterval(() => sid && refresh(), 3000);
+const initial = new URLSearchParams(location.search).get('session');
+if (initial) useSession(initial);
+</script>
+</body>
+</html>
