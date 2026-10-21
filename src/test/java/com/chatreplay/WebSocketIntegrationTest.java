@@ -34,7 +34,14 @@ class WebSocketIntegrationTest extends IntegrationTest {
     class Client implements WebSocket.Listener {
         final BlockingQueue<JsonNode> frames = new LinkedBlockingQueue<>();
         final StringBuilder buffer = new StringBuilder();
+        final java.util.concurrent.CompletableFuture<Integer> closed = new java.util.concurrent.CompletableFuture<>();
         WebSocket ws;
+
+        @Override
+        public CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) {
+            closed.complete(statusCode);
+            return null;
+        }
 
         Client connect(UUID sid, String user, Long lastSeq) throws Exception {
             ws = http.newWebSocketBuilder().buildAsync(wsUri(sid, user, lastSeq), this).get(5, TimeUnit.SECONDS);
@@ -78,6 +85,10 @@ class WebSocketIntegrationTest extends IntegrationTest {
 
         void abort() {
             ws.abort();
+        }
+
+        int awaitClose() throws Exception {
+            return closed.get(5, TimeUnit.SECONDS);
         }
     }
 
@@ -231,6 +242,42 @@ class WebSocketIntegrationTest extends IntegrationTest {
         assertThat(last.get("type").asString()).isEqualTo("DISCONNECT");
         assertThat(last.get("payload").get("reason").asString()).isEqualTo("INSTANCE_DOWN");
         assertThat(last.get("clientEventId").asString()).isEqualTo("disconnect:conn-dead");
+    }
+
+    @Test
+    void leaveClosesConnectionsSoLeftUserStopsReceiving() throws Exception {
+        UUID sid = createSession("alice", List.of("alice", "bob"));
+        Client alice = new Client().connect(sid, "alice", null);
+        alice.await(f -> f.get("type").asString().equals("welcome"));
+        Client bob = new Client().connect(sid, "bob", null);
+        bob.await(f -> f.get("type").asString().equals("welcome"));
+        Client bobTab2 = new Client().connect(sid, "bob", null); // 같은 사용자의 두 번째 연결(첫 연결은 인계로 닫힘)
+        bobTab2.await(f -> f.get("type").asString().equals("welcome"));
+
+        bobTab2.send(Map.of("type", "send", "clientEventId", "bye", "eventType", "LEAVE", "payload", Map.of()));
+        JsonNode ack = bobTab2.await(f -> f.get("type").asString().equals("ack"));
+        assertThat(ack.get("outcome").asString()).isEqualTo("APPENDED");
+        assertThat(bobTab2.awaitClose()).isEqualTo(1000);   // 퇴장한 연결은 ack 후 닫힌다
+        alice.awaitEvent("LEAVE");
+
+        // 퇴장은 연결 끊김이 아니므로 DISCONNECT 가 남지 않고, 세션은 중단 상태가 되지 않는다
+        Thread.sleep(200);
+        for (JsonNode e : get("/sessions/" + sid + "/events").body().get("events")) {
+            assertThat(e.get("type").asString()).isNotEqualTo("DISCONNECT");
+        }
+        assertThat(session(sid).get("status").asString()).isEqualTo("ACTIVE");
+        alice.close();
+    }
+
+    @Test
+    void restLeaveClosesOpenWebSocketOfThatUser() throws Exception {
+        UUID sid = createSession("alice", List.of("alice", "bob"));
+        Client bob = new Client().connect(sid, "bob", null);
+        bob.await(f -> f.get("type").asString().equals("welcome"));
+
+        assertThat(post("/sessions/" + sid + "/leave", "bob", null).status()).isEqualTo(200);
+        assertThat(bob.awaitClose()).isEqualTo(4001);
+        assertThat(presenceOf(sid, "bob")).isEqualTo("OFFLINE");
     }
 
     @Test

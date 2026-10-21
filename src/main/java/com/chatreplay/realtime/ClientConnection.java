@@ -216,6 +216,14 @@ public class ClientConnection {
         }
     }
 
+    /**
+     * 보내 둔 프레임(ack 등)이 전송 버퍼에서 빠져나갈 시간을 준 뒤 닫는다.
+     * 다른 스레드가 전송 중일 때 send 는 버퍼에만 쌓이므로, 바로 close 하면 버퍼가 버려질 수 있다.
+     */
+    public void closeAfterPendingSends(CloseStatus status) {
+        executor.schedule(() -> close(status), 200, TimeUnit.MILLISECONDS);
+    }
+
     public void markReplaced() {
         replaced = true;
     }

@@ -49,6 +49,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
     };
     private static final String ATTR_CONN = "conn";
+    private static final CloseStatus LEFT = new CloseStatus(1000, "left the session");
 
     private final ConnectionRegistry registry;
     private final SessionBroadcaster broadcaster;
@@ -187,6 +188,10 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             ack.put("seq", r.event() == null ? null : r.event().seq());
             ack.put("serverTs", r.event() == null ? null : r.event().serverTs());
             conn.send(ack);
+            if (type == EventType.LEAVE && r.event() != null) {
+                conn.markReplaced(); // 퇴장 후 닫힘은 DISCONNECT 가 아니다
+                conn.closeAfterPendingSends(LEFT);
+            }
         } catch (ApiException e) {
             conn.send(errorFrame(clientEventId, e.code().name(), e.getMessage(), e.code().retryable()));
         } catch (IllegalArgumentException | java.time.format.DateTimeParseException e) {

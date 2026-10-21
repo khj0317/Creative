@@ -114,6 +114,15 @@ class EventIngestIntegrationTest extends IntegrationTest {
     }
 
     @Test
+    void rejectsNegativeReadPosition() {
+        UUID sid = createSession("alice", List.of("alice", "bob"));
+        join(sid, "alice");
+        JsonNode r = sendEvent(sid, "alice", "read-neg", "READ", Map.of("upToSeq", -5));
+        assertThat(r.get("status").asString()).isEqualTo("REJECTED");
+        assertThat(r.get("code").asString()).isEqualTo("INVALID_REQUEST");
+    }
+
+    @Test
     void batchReportsPerItemResults() {
         UUID sid = createSession("alice", List.of("alice", "bob"));
         join(sid, "alice");

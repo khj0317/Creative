@@ -1,5 +1,7 @@
 # Realtime Session Replay
 
+[![CI](https://github.com/khj0317/Creative/actions/workflows/ci.yml/badge.svg)](https://github.com/khj0317/Creative/actions/workflows/ci.yml)
+
 **1:1 실시간 채팅 + 이벤트 소싱 기반 특정 시점 상태 복원** 백엔드.
 
 모든 상태 변화(참여/퇴장/연결 끊김/재연결/메시지/수정/삭제/읽음/종료)를 세션별로 **빈틈없이 단조 증가하는 `seq`** 를 가진 이벤트로 저장한다. 그 이벤트만으로 **어느 시점의 대화 상태든 결정적으로 복원**한다. 실시간 통신은 WebSocket 을 쓰고, 서버 2대 이상으로 수평 확장(Redis Pub/Sub)할 수 있다.
@@ -48,7 +50,9 @@ docker compose --profile observability up -d   # Prometheus(9090) + Grafana(http
 | `SessionStateReducerTest` | 리듀서 결정성: 중복/역순 입력 무시, seq 빈틈은 실패, **모든 지점의 스냅샷+리플레이 == 전체 리플레이**, 무작위 대화 50개 |
 | `EventIngestIntegrationTest` | 멱등 재전송, **같은 메시지 40개를 3번씩 동시 전송(120건) → 40개만 저장, seq 빈틈 없음**, 수정이 원본보다 먼저 오는 경우, 배치 항목별 결과, 1:1 정원과 초대, 종료 멱등, 목록 필터와 커서 |
 | `TimelineAndProjectionIntegrationTest` | 시점 복원(수정 전/후, 퇴장, unread), 모든 seq 에서 AUTO==FULL, 비동기 프로젝션, **장애 주입 → 재시도 → DLQ → redrive**, 재구축 결과 동일 |
-| `WebSocketIntegrationTest` | 실시간 전달과 ack/중복, typing, **끊김 → INTERRUPTED → lastSeq resume(빈틈·중복 없이)**, 연결 인계, **장애 인스턴스 reaper**, 초대받지 않은 사용자 거부 |
+| `WebSocketIntegrationTest` | 실시간 전달과 ack/중복, typing, **끊김 → INTERRUPTED → lastSeq resume(빈틈·중복 없이)**, 연결 인계, **퇴장 시 해당 사용자의 모든 연결 종료**, **장애 인스턴스 reaper**, 초대받지 않은 사용자 거부 |
+
+GitHub Actions 가 push 마다 같은 테스트를 실행한다(상단 배지).
 
 ### 수동 검증 (Postman / WebSocket 클라이언트)
 - **Postman**: Import → File → `docs/openapi.yaml` 을 가져오면 모든 REST API 가 컬렉션으로 만들어진다. `X-User-Id` 헤더에 사용자 이름을 넣고 호출한다.

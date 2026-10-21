@@ -67,6 +67,12 @@ public class EventService {
                 .increment();
         if (result.appended()) {
             broadcaster.publish(BroadcastEnvelope.event(result.event(), instanceId.value()));
+            if (result.event().type() == EventType.LEAVE) {
+                // 퇴장한 사용자가 열어 둔 연결(다른 탭/인스턴스)로 이후 대화가 계속 전달되지 않게 닫는다.
+                // 요청을 보낸 WebSocket 연결 자체는 ack 를 보낸 뒤 핸들러가 닫는다.
+                broadcaster.publish(BroadcastEnvelope.replaced(cmd.sessionId(), cmd.actorId(), cmd.connectionId(),
+                        instanceId.value()));
+            }
         }
         return result;
     }

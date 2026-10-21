@@ -16,6 +16,7 @@ import com.chatreplay.event.EventType;
 import com.chatreplay.session.ParticipantRepository;
 import com.chatreplay.session.ParticipantRow;
 import io.micrometer.core.instrument.MeterRegistry;
+import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -59,6 +60,15 @@ public class InstanceHeartbeat {
         this.clock = clock;
         this.meters = meters;
         this.startedAt = clock.instant();
+    }
+
+    /**
+     * 웹 서버가 연결을 받기 전에 먼저 등록한다. 등록 전에 붙은 연결을 다른 인스턴스의 reaper 가
+     * "하트비트 없는 인스턴스의 연결" 로 오판해 정리하는 일을 막는다.
+     */
+    @PostConstruct
+    void register() {
+        beat();
     }
 
     @Scheduled(fixedDelayString = "${chat.presence.heartbeat-interval}", initialDelay = 0)

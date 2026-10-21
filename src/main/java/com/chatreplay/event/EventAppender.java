@@ -160,7 +160,11 @@ public class EventAppender {
             }
             case READ -> {
                 requireJoined(actor);
-                long upTo = Math.min(longValue(in, "upToSeq"), session.lastSeq());
+                long requested = longValue(in, "upToSeq");
+                if (requested < 0) {
+                    throw new ApiException(ErrorCode.INVALID_REQUEST, "upToSeq 는 0 이상이어야 합니다.");
+                }
+                long upTo = Math.min(requested, session.lastSeq());
                 yield Decision.event(EventType.READ, Map.of("upToSeq", upTo), null);
             }
             case SESSION_ENDED -> {

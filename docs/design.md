@@ -113,8 +113,9 @@ sequenceDiagram
 2. **at-least-once 전송 + 멱등 저장 = effectively-once**: 클라이언트는 ack 를 못 받은 전송을 같은 `clientEventId` 로 재전송한다. 이미 저장된 것이면 `DUPLICATE` 와 처음의 seq 가 돌아온다.
 3. **presence**: 연결이 끊기면 `DISCONNECT`(presence=`DISCONNECTED`, 세션=`INTERRUPTED`), 다시 붙으면 `RECONNECT`(→ `ACTIVE`). 둘 다 이벤트라서 **"그때 상대가 끊겨 있었는지" 도 복원된다.**
 4. **늦게 도착한 종료 신호 무시**: DISCONNECT 는 "그 연결이 아직 참여자의 현재 연결일 때만" 기록한다. 새 연결이 먼저 붙은 뒤(빠른 재연결, 다른 인스턴스로 이동) 옛 연결의 종료가 도착해도 상태가 뒤집히지 않는다.
-5. **같은 사용자의 중복 연결**: 새 연결이 생기면 `REPLACED` 브로드캐스트로 다른 인스턴스에 남은 옛 연결을 4001 로 닫는다(DISCONNECT 이벤트 없음).
-6. **유실 대비 이중 장치**: (a) 클라이언트 `ping` 응답의 `headSeq` > `lastSeq` 이면 클라이언트가 `resume` 을 요청하고, (b) 서버 안전망이 2초마다 로컬 연결의 head 를 한 번에 조회해 뒤처진 연결을 따라잡게 한다(Pub/Sub 유실 후 이벤트가 더 오지 않는 "대화의 마지막 메시지" 문제).
+5. **퇴장(LEAVE)**: 퇴장이 기록되면 그 사용자가 열어 둔 모든 연결(다른 탭, 다른 인스턴스 포함)을 닫는다. 요청한 연결은 ack 를 보낸 뒤 1000, 나머지는 4001 로 닫는다. 퇴장한 사용자에게 이후 대화가 계속 전달되는 정보 노출을 막기 위해서다. 퇴장은 연결 끊김이 아니므로 DISCONNECT 를 남기지 않고 세션도 INTERRUPTED 가 되지 않는다.
+6. **같은 사용자의 중복 연결**: 새 연결이 생기면 `REPLACED` 브로드캐스트로 다른 인스턴스에 남은 옛 연결을 4001 로 닫는다(DISCONNECT 이벤트 없음).
+7. **유실 대비 이중 장치**: (a) 클라이언트 `ping` 응답의 `headSeq` > `lastSeq` 이면 클라이언트가 `resume` 을 요청하고, (b) 서버 안전망이 2초마다 로컬 연결의 head 를 한 번에 조회해 뒤처진 연결을 따라잡게 한다(Pub/Sub 유실 후 이벤트가 더 오지 않는 "대화의 마지막 메시지" 문제).
 
 ---
 
@@ -188,7 +189,7 @@ Grafana 대시보드(`infra/grafana/dashboards/chat.json`)는 자동 프로비�
 ### 8.1 서버 다운(인스턴스 장애)
 | 단계 | 내용 |
 |---|---|
-| **감지** | ① LB 헬스체크(`/actuator/health/readiness`) 실패 ② 인스턴스 하트비트(`server_instances.heartbeat_at`, 5초 주기)가 `instance-timeout`(20초) 이상 끊김 ③ 대시보드에서 해당 인스턴스 연결 수가 0으로 급락, 다른 인스턴스 연결 수 급증 |
+| **감지** | ① LB 헬스체크(`/actuator/health/readiness`) 실패 ② 인스턴스 하트비트(`server_instances.heartbeat_at`, 기동 시 즉시 등록 후 5초 주기)가 `instance-timeout`(20초) 이상 끊김 ③ 대시보드에서 해당 인스턴스 연결 수가 0으로 급락, 다른 인스턴스 연결 수 급증 |
 | **완화** | ① 클라이언트는 연결 끊김을 감지하고 지수 백오프로 재연결하며 `lastSeq` 로 resume. LB 가 살아 있는 인스턴스로 보낸다 ② ack 를 못 받은 전송은 같은 `clientEventId` 로 재전송한다. 이미 커밋된 것은 `DUPLICATE`, 커밋 전에 죽은 것은 트랜잭션 롤백으로 저장되지 않았으므로 새로 저장된다(**부분 저장 없음**) ③ 살아 있는 인스턴스의 **reaper 가 죽은 인스턴스의 연결을 `DISCONNECT(reason=INSTANCE_DOWN)` 로 기록**한다. 상대방에게 "연결 끊김" 이 보이고 세션은 `INTERRUPTED` 가 된다 |
 | **복구** | ① 재연결하면 `RECONNECT` → `ACTIVE` ② 죽은 인스턴스가 들고 있던 outbox lease 는 30초 뒤 만료되어 다른 워커가 이어서 처리한다 ③ 인스턴스 재기동 후 하트비트가 재개된다. 정상 종료(배포)라면 `@PreDestroy` 에서 연결을 1001 로 닫아 클라이언트가 즉시 재연결한다 |
 | **검증** | `node scripts/chaos-instance-down.mjs`: app-2 를 `docker kill` → 21초 뒤 bob 이 `DISCONNECTED(INSTANCE_DOWN)`, 세션 `INTERRUPTED` → LB 로 재연결하자 `ACTIVE`. 통합 테스트 `reaperDisconnectsConnectionsOfDeadInstances` |
